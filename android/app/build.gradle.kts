@@ -13,7 +13,9 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
+        isCoreLibraryDesugaringEnabled = true // 🔹 Ajouté
     }
+
 
     kotlinOptions {
         jvmTarget = JavaVersion.VERSION_11.toString()
@@ -37,8 +39,19 @@ android {
             signingConfig = signingConfigs.getByName("debug")
         }
     }
+
+
+
 }
 
 flutter {
     source = "../.."
+}
+
+dependencies {
+    // 🔹 Core library desugaring
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.0.3")
+
+    // 🔹 Flutter local notifications
+    implementation("com.google.android.gms:play-services-base:18.2.0")
 }
