@@ -1,4 +1,15 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:intl/intl.dart';
+import 'actualite_details_screen.dart';
+import 'AdminActualitesScreen.dart';
+import 'calendar_screen.dart';
+import 'group_list_screen.dart';
+import 'offre_list_screen.dart';
+import 'messaging_screen.dart';
 import 'profil_screen.dart';
 
 class EtudiantHome extends StatefulWidget {
@@ -9,311 +20,157 @@ class EtudiantHome extends StatefulWidget {
 }
 
 class _EtudiantHomeState extends State<EtudiantHome> {
-  int _selectedIndex = 0;
+  String? userToken;
+  int? userId;
+  bool isLoading = true;
+  int _currentIndex = 0;
 
   @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.grey.shade50,
-      body: SafeArea(
-        child: Column(
-          children: [
-            // Header avec recherche, profil et notifications
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.grey.shade200,
-                    blurRadius: 8,
-                    offset: const Offset(0, 2),
-                  ),
-                ],
-              ),
-              child: Row(
-                children: [
-                  // Profil à gauche
-                  GestureDetector(
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(builder: (context) => const ProfilScreen()),
-                      );
-                    },
-                    child: Container(
-                      width: 36,
-                      height: 36,
-                      decoration: BoxDecoration(
-                        color: Colors.indigo.shade100,
-                        borderRadius: BorderRadius.circular(18),
-                      ),
-                      child: Icon(
-                        Icons.person,
-                        color: Colors.indigo.shade600,
-                        size: 20,
-                      ),
-                    ),
-                  ),
-
-                  const SizedBox(width: 12),
-
-                  // Barre de recherche
-                  Expanded(
-                    child: Container(
-                      height: 36,
-                      decoration: BoxDecoration(
-                        color: Colors.grey.shade100,
-                        borderRadius: BorderRadius.circular(18),
-                      ),
-                      child: TextField(
-                        decoration: InputDecoration(
-                          hintText: "Rechercher...",
-                          hintStyle: TextStyle(
-                            color: Colors.grey.shade500,
-                            fontSize: 14,
-                          ),
-                          prefixIcon: Icon(
-                            Icons.search,
-                            color: Colors.grey.shade500,
-                            size: 20,
-                          ),
-                          border: InputBorder.none,
-                          contentPadding: const EdgeInsets.symmetric(vertical: 8),
-                        ),
-                      ),
-                    ),
-                  ),
-
-                  const SizedBox(width: 12),
-
-                  // Notifications à droite
-                  GestureDetector(
-                    onTap: () {
-                      // Action pour les notifications
-                    },
-                    child: Container(
-                      width: 36,
-                      height: 36,
-                      decoration: BoxDecoration(
-                        color: Colors.grey.shade100,
-                        borderRadius: BorderRadius.circular(18),
-                      ),
-                      child: Stack(
-                        children: [
-                          Center(
-                            child: Icon(
-                              Icons.notifications_outlined,
-                              color: Colors.grey.shade600,
-                              size: 20,
-                            ),
-                          ),
-                          // Badge de notification
-                          Positioned(
-                            top: 6,
-                            right: 6,
-                            child: Container(
-                              width: 6,
-                              height: 6,
-                              decoration: const BoxDecoration(
-                                color: Colors.red,
-                                shape: BoxShape.circle,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
-            // Contenu principal
-            Expanded(
-              child: _buildContent(),
-            ),
-          ],
-        ),
-      ),
-
-      // Barre de navigation en bas
-      bottomNavigationBar: Container(
-        decoration: BoxDecoration(
-          color: Colors.white,
-          boxShadow: [
-            BoxShadow(
-              color: Colors.grey.shade200,
-              blurRadius: 8,
-              offset: const Offset(0, -2),
-            ),
-          ],
-        ),
-        child: BottomNavigationBar(
-          currentIndex: _selectedIndex,
-          onTap: (index) {
-            setState(() {
-              _selectedIndex = index;
-            });
-          },
-          type: BottomNavigationBarType.fixed,
-          backgroundColor: Colors.white,
-          selectedItemColor: Colors.indigo.shade600,
-          unselectedItemColor: Colors.grey.shade500,
-          elevation: 0,
-          selectedFontSize: 11,
-          unselectedFontSize: 11,
-          iconSize: 22,
-          items: const [
-            BottomNavigationBarItem(
-              icon: Icon(Icons.home_outlined),
-              activeIcon: Icon(Icons.home),
-              label: 'Accueil',
-            ),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.school_outlined),
-              activeIcon: Icon(Icons.school),
-              label: 'Cours',
-            ),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.work_outline),
-              activeIcon: Icon(Icons.work),
-              label: 'Stages',
-            ),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.person_outline),
-              activeIcon: Icon(Icons.person),
-              label: 'Profil',
-            ),
-          ],
-        ),
-      ),
-    );
+  void initState() {
+    super.initState();
+    _loadUserData();
   }
 
-  Widget _buildContent() {
-    switch (_selectedIndex) {
-      case 0:
-        return _buildHomeContent();
-      case 1:
-        return _buildCoursContent();
-      case 2:
-        return _buildStagesContent();
-      case 3:
-        return ProfilScreen();
-      default:
-        return _buildHomeContent();
+  Future<void> _loadUserData() async {
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    setState(() {
+      userToken = prefs.getString('token');
+      userId = prefs.getInt('user_id');
+      isLoading = false;
+    });
+    debugPrint("📦 Token chargé : $userToken");
+    debugPrint("📦 ID utilisateur : $userId");
+  }
+
+  void _onTabTapped(int index) {
+    if (index == 2) {
+      // Bouton central "+"
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (context) => const AdminActualitesScreen()),
+      );
+    } else {
+      setState(() {
+        _currentIndex = index;
+      });
     }
   }
 
-  Widget _buildHomeContent() {
-    return SingleChildScrollView(
-      child: Column(
-        children: [
-          const SizedBox(height: 16),
+  @override
+  Widget build(BuildContext context) {
+    if (isLoading || userToken == null || userId == null) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
 
-          // Section "Commencer un post"
-          _buildCreatePostSection(),
+    final screens = [
+      ActualitesFeedScreen(userToken: userToken),
+      CalendarScreen(userToken: userToken!, userId: userId!),
+      const SizedBox(),
+      const OffreListScreen(),
+      GroupListScreen(userToken: userToken!, userId: userId!),
+    ];
 
-          const SizedBox(height: 16),
-
-          // Section des raccourcis rapides
-          _buildQuickActionsSection(),
-
-          const SizedBox(height: 16),
-
-          // Feed principal
-          _buildFeedSection(),
+    return Scaffold(
+      backgroundColor: const Color(0xFFF8F9FA),
+      appBar: AppBar(
+        backgroundColor: Colors.white,
+        elevation: 0,
+        leading: Padding(
+          padding: const EdgeInsets.all(8.0),
+          child: GestureDetector(
+            onTap: () {
+              Navigator.pushNamed(context, '/profile');
+            },
+            child: CircleAvatar(
+              backgroundColor: const Color(0xFF5C6BC0),
+              child: const Icon(Icons.person, color: Colors.white, size: 24),
+            ),
+          ),
+        ),
+        title: const Text(
+          "ISI RELINK",
+          style: TextStyle(
+            fontSize: 20,
+            fontWeight: FontWeight.w700,
+            color: Color(0xFF1A1A1A),
+          ),
+        ),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.message_outlined, color: Color(0xFF1A1A1A)),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const MessagingScreen()),
+              );
+            },
+          ),
+          IconButton(
+            icon: const Icon(Icons.notifications_outlined, color: Color(0xFF1A1A1A)),
+            onPressed: () {
+              Navigator.pushNamed(context, '/notifications');
+            },
+          ),
+          const SizedBox(width: 8),
         ],
+      ),
+      body: screens[_currentIndex],
+      bottomNavigationBar: Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          border: Border(
+            top: BorderSide(
+              color: Colors.grey.shade200,
+              width: 1,
+            ),
+          ),
+        ),
+        child: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: [
+                _buildNavItem(Icons.home_outlined, Icons.home, "Accueil", 0),
+                _buildNavItem(Icons.event_outlined, Icons.event, "Événements", 1),
+                _buildAddButton(),
+                _buildNavItem(Icons.work_outline, Icons.work, "Offres", 3),
+                _buildNavItem(Icons.group_outlined, Icons.group, "Groupes", 4),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }
 
-  Widget _buildCreatePostSection() {
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.grey.shade200,
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Column(
-        children: [
-          Row(
-            children: [
-              Container(
-                width: 40,
-                height: 40,
-                decoration: BoxDecoration(
-                  color: Colors.indigo.shade100,
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Icon(
-                  Icons.person,
-                  color: Colors.indigo.shade600,
-                  size: 20,
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                  decoration: BoxDecoration(
-                    color: Colors.grey.shade50,
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: Colors.grey.shade200),
-                  ),
-                  child: Text(
-                    "Commencer un post...",
-                    style: TextStyle(
-                      color: Colors.grey.shade600,
-                      fontSize: 14,
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
-            children: [
-              _buildPostOption(Icons.photo_outlined, "Photo", Colors.blue.shade600),
-              _buildPostOption(Icons.videocam_outlined, "Vidéo", Colors.green.shade600),
-              _buildPostOption(Icons.event_outlined, "Événement", Colors.orange.shade600),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildPostOption(IconData icon, String label, Color color) {
+  Widget _buildNavItem(IconData outlinedIcon, IconData filledIcon, String label, int index) {
+    final isSelected = _currentIndex == index;
     return Expanded(
-      child: InkWell(
-        onTap: () {},
-        borderRadius: BorderRadius.circular(8),
-        child: Padding(
+      child: GestureDetector(
+        onTap: () => _onTabTapped(index),
+        behavior: HitTestBehavior.opaque,
+        child: Container(
           padding: const EdgeInsets.symmetric(vertical: 8),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(icon, color: color, size: 20),
-              const SizedBox(width: 8),
+              Icon(
+                isSelected ? filledIcon : outlinedIcon,
+                color: isSelected ? const Color(0xFF5C6BC0) : const Color(0xFF757575),
+                size: 26,
+              ),
+              const SizedBox(height: 4),
               Text(
                 label,
                 style: TextStyle(
-                  color: Colors.grey.shade700,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w500,
+                  fontSize: 11,
+                  fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
+                  color: isSelected ? const Color(0xFF5C6BC0) : const Color(0xFF757575),
                 ),
+                textAlign: TextAlign.center,
               ),
             ],
           ),
@@ -322,245 +179,333 @@ class _EtudiantHomeState extends State<EtudiantHome> {
     );
   }
 
-  Widget _buildQuickActionsSection() {
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16),
-      child: Row(
-        children: [
-          Expanded(
-            child: _buildQuickActionCard(
-              Icons.school_outlined,
-              "Mes Cours",
-              Colors.blue.shade600,
-              Colors.blue.shade50,
+  Widget _buildAddButton() {
+    return GestureDetector(
+      onTap: () => _onTabTapped(2),
+      child: Container(
+        width: 56,
+        height: 56,
+        decoration: BoxDecoration(
+          color: const Color(0xFF5C6BC0),
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: const Color(0xFF5C6BC0).withOpacity(0.25),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
             ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: _buildQuickActionCard(
-              Icons.work_outline,
-              "Stages",
-              Colors.green.shade600,
-              Colors.green.shade50,
-            ),
-          ),
-        ],
+          ],
+        ),
+        child: const Icon(Icons.add, color: Colors.white, size: 28),
       ),
     );
   }
+}
 
-  Widget _buildQuickActionCard(IconData icon, String title, Color iconColor, Color backgroundColor) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: backgroundColor,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: iconColor.withOpacity(0.1)),
-      ),
-      child: Column(
-        children: [
-          Container(
-            width: 40,
-            height: 40,
+// Screen pour le fil d'actualités
+class ActualitesFeedScreen extends StatefulWidget {
+  final String? userToken;
+  const ActualitesFeedScreen({super.key, this.userToken});
+
+  @override
+  State<ActualitesFeedScreen> createState() => _ActualitesFeedScreenState();
+}
+
+class _ActualitesFeedScreenState extends State<ActualitesFeedScreen> {
+  List<Map<String, dynamic>> actualites = [];
+  bool isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadActualites();
+  }
+
+  Future<void> _loadActualites() async {
+    setState(() => isLoading = true);
+    try {
+      final response = await http.get(
+        Uri.parse('http://10.0.2.2:8000/api/actualites'),
+        headers: {
+          if (widget.userToken != null) "Authorization": "Bearer ${widget.userToken}",
+          "Accept": "application/json",
+        },
+      );
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        setState(() {
+          actualites = List<Map<String, dynamic>>.from(data);
+        });
+      } else {
+        debugPrint('Erreur chargement actualités: ${response.statusCode}');
+      }
+    } catch (e) {
+      debugPrint("Erreur réseau: $e");
+    } finally {
+      setState(() => isLoading = false);
+    }
+  }
+
+  Future<void> _toggleLike(Map<String, dynamic> act) async {
+    if (widget.userToken == null) return;
+    final liked = act['liked_by_user'] ?? false;
+    final url = Uri.parse('http://10.0.2.2:8000/api/actualites/${act['id']}/like');
+    try {
+      final response = await http.post(
+        url,
+        headers: {
+          "Authorization": "Bearer ${widget.userToken}",
+          "Accept": "application/json",
+        },
+      );
+      if (response.statusCode == 200) {
+        setState(() {
+          act['liked_by_user'] = !liked;
+          act['likes_count'] = (act['likes_count'] ?? 0) + (!liked ? 1 : -1);
+        });
+      } else {
+        debugPrint('Erreur like: ${response.statusCode}');
+      }
+    } catch (e) {
+      debugPrint("Erreur like: $e");
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (isLoading) {
+      return const Center(
+        child: CircularProgressIndicator(
+          color: Color(0xFF5C6BC0),
+          strokeWidth: 3,
+        ),
+      );
+    }
+
+    if (actualites.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.article_outlined,
+              size: 80,
+              color: Colors.grey[300],
+            ),
+            const SizedBox(height: 16),
+            Text(
+              "Aucune actualité disponible",
+              style: TextStyle(
+                fontSize: 16,
+                color: Colors.grey[600],
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return RefreshIndicator(
+      onRefresh: _loadActualites,
+      color: const Color(0xFF5C6BC0),
+      child: ListView.builder(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        itemCount: actualites.length,
+        itemBuilder: (context, index) {
+          final act = actualites[index];
+          final imageUrl = act['image']?.toString().isNotEmpty == true ? act['image'] : null;
+          final date = act['created_at'] != null
+              ? DateFormat('dd MMM yyyy').format(DateTime.parse(act['created_at']))
+              : '';
+          final auteur = act['auteur']?['name'] ?? 'Anonyme';
+          final liked = act['liked_by_user'] ?? false;
+          final likesCount = act['likes_count'] ?? 0;
+          final commentsCount = act['comments_count'] ?? 0;
+
+          return Container(
+            margin: const EdgeInsets.only(bottom: 16),
             decoration: BoxDecoration(
               color: Colors.white,
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(16),
               boxShadow: [
                 BoxShadow(
-                  color: iconColor.withOpacity(0.2),
+                  color: Colors.black.withOpacity(0.04),
                   blurRadius: 8,
                   offset: const Offset(0, 2),
                 ),
               ],
             ),
-            child: Icon(icon, color: iconColor, size: 22),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            title,
-            style: TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
-              color: Colors.grey.shade800,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildFeedSection() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: Text(
-            "Actualités",
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.w600,
-              color: Colors.grey.shade800,
-            ),
-          ),
-        ),
-        const SizedBox(height: 12),
-
-        // Posts du feed
-        _buildFeedPost(
-          "Système",
-          "Rappel: Date limite de remise des projets",
-          "N'oubliez pas de soumettre vos projets avant la date limite.",
-          Icons.info_outline,
-          Colors.orange.shade600,
-        ),
-
-        _buildFeedPost(
-          "Administration",
-          "Nouvelle session d'examens",
-          "Les inscriptions pour la session de rattrapage sont ouvertes.",
-          Icons.school_outlined,
-          Colors.blue.shade600,
-        ),
-
-        _buildFeedPost(
-          "Carrière",
-          "Offres de stage disponibles",
-          "Consultez les nouvelles offres de stage dans votre domaine.",
-          Icons.work_outline,
-          Colors.green.shade600,
-        ),
-
-        const SizedBox(height: 20),
-      ],
-    );
-  }
-
-  Widget _buildFeedPost(String author, String title, String content, IconData icon, Color iconColor) {
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.grey.shade200,
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                width: 36,
-                height: 36,
-                decoration: BoxDecoration(
-                  color: iconColor.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(18),
-                ),
-                child: Icon(icon, color: iconColor, size: 18),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      author,
-                      style: const TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.black87,
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (imageUrl != null)
+                    Image.network(
+                      imageUrl,
+                      fit: BoxFit.cover,
+                      width: double.infinity,
+                      height: 200,
+                      errorBuilder: (context, error, stackTrace) => Container(
+                        height: 200,
+                        color: const Color(0xFFF0F0F0),
+                        child: const Center(
+                          child: Icon(
+                            Icons.image_outlined,
+                            size: 60,
+                            color: Color(0xFFBDBDBD),
+                          ),
+                        ),
                       ),
                     ),
-                    Text(
-                      "Il y a quelques heures",
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.grey.shade500,
-                      ),
+                  Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            CircleAvatar(
+                              radius: 18,
+                              backgroundColor: const Color(0xFF5C6BC0),
+                              child: Text(
+                                auteur[0].toUpperCase(),
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    auteur,
+                                    style: const TextStyle(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w600,
+                                      color: Color(0xFF1A1A1A),
+                                    ),
+                                  ),
+                                  Text(
+                                    date,
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: Colors.grey[600],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 14),
+                        Text(
+                          act['titre'] ?? '',
+                          style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w700,
+                            color: Color(0xFF1A1A1A),
+                            height: 1.3,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          act['contenu']?.length > 120
+                              ? '${act['contenu'].substring(0, 120)}...'
+                              : act['contenu'] ?? '',
+                          style: TextStyle(
+                            fontSize: 15,
+                            color: Colors.grey[700],
+                            height: 1.5,
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        Container(
+                          height: 1,
+                          color: const Color(0xFFF0F0F0),
+                        ),
+                        const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            InkWell(
+                              onTap: () => _toggleLike(act),
+                              borderRadius: BorderRadius.circular(8),
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 8, vertical: 8),
+                                child: Row(
+                                  children: [
+                                    Icon(
+                                      liked
+                                          ? Icons.favorite
+                                          : Icons.favorite_border,
+                                      color: liked
+                                          ? const Color(0xFFE91E63)
+                                          : Colors.grey[600],
+                                      size: 22,
+                                    ),
+                                    const SizedBox(width: 6),
+                                    Text(
+                                      "$likesCount",
+                                      style: TextStyle(
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w600,
+                                        color: Colors.grey[700],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            InkWell(
+                              onTap: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) =>
+                                        ActualiteDetailsScreen(actualite: act),
+                                  ),
+                                );
+                              },
+                              borderRadius: BorderRadius.circular(8),
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 8, vertical: 8),
+                                child: Row(
+                                  children: [
+                                    Icon(
+                                      Icons.chat_bubble_outline,
+                                      color: Colors.grey[600],
+                                      size: 22,
+                                    ),
+                                    const SizedBox(width: 6),
+                                    Text(
+                                      "$commentsCount",
+                                      style: TextStyle(
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w600,
+                                        color: Colors.grey[700],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
                     ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Text(
-            title,
-            style: const TextStyle(
-              fontSize: 15,
-              fontWeight: FontWeight.w600,
-              color: Colors.black87,
-            ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            content,
-            style: TextStyle(
-              fontSize: 14,
-              color: Colors.grey.shade700,
-              height: 1.4,
-            ),
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              _buildPostAction(Icons.thumb_up_outlined, "J'aime"),
-              const SizedBox(width: 24),
-              _buildPostAction(Icons.comment_outlined, "Commenter"),
-              const SizedBox(width: 24),
-              _buildPostAction(Icons.share_outlined, "Partager"),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildPostAction(IconData icon, String label) {
-    return InkWell(
-      onTap: () {},
-      borderRadius: BorderRadius.circular(6),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-        child: Row(
-          children: [
-            Icon(icon, size: 16, color: Colors.grey.shade600),
-            const SizedBox(width: 6),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 12,
-                color: Colors.grey.shade600,
-                fontWeight: FontWeight.w500,
+                  ),
+                ],
               ),
             ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildCoursContent() {
-    return const Center(
-      child: Text(
-        "Mes Cours",
-        style: TextStyle(fontSize: 20, fontWeight: FontWeight.w600),
-      ),
-    );
-  }
-
-  Widget _buildStagesContent() {
-    return const Center(
-      child: Text(
-        "Offres de Stage",
-        style: TextStyle(fontSize: 20, fontWeight: FontWeight.w600),
+          );
+        },
       ),
     );
   }

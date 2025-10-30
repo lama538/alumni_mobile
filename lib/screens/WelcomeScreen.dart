@@ -5,68 +5,46 @@ class WelcomeScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.grey.shade50,
-      body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 32.0),
-          child: Column(
-            children: [
-              // Section du haut avec logo/icône
-              Expanded(
-                flex: 2,
-                child: Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Container(
-                        width: 100,
-                        height: 100,
-                        decoration: BoxDecoration(
-                          color: Colors.indigo.shade600,
-                          borderRadius: BorderRadius.circular(25),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.indigo.shade200,
-                              blurRadius: 20,
-                              offset: const Offset(0, 8),
-                            ),
-                          ],
-                        ),
-                        child: const Icon(
-                          Icons.person,
-                          size: 50,
-                          color: Colors.white,
-                        ),
-                      ),
-                      const SizedBox(height: 24),
-                      Text(
-                        "Bienvenue",
-                        style: TextStyle(
-                          color: Colors.grey.shade800,
-                          fontSize: 32,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: -0.5,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        "Commencez votre expérience\navec nous dès maintenant",
-                        style: TextStyle(
-                          color: Colors.grey.shade600,
-                          fontSize: 16,
-                          height: 1.4,
-                        ),
-                        textAlign: TextAlign.center,
-                      ),
-                    ],
-                  ),
-                ),
-              ),
+    final size = MediaQuery.of(context).size;
 
-              // Section des boutons
-              Expanded(
-                flex: 1,
+    return Scaffold(
+      backgroundColor: Colors.white,
+      body: Stack(
+        alignment: Alignment.topCenter,
+        children: [
+          // 🟦 IMAGE D’ARRIÈRE-PLAN
+          Positioned(
+            top: 0,
+            child: Image.asset(
+              'assets/images/groupperssone.jpg',
+              width: size.width,
+              height: size.height * 0.55,
+              fit: BoxFit.cover,
+            ),
+          ),
+
+          // 🟩 CONTENU PRINCIPAL (zone blanche arrondie descendue légèrement)
+          Positioned(
+            top: size.height * 0.45, // 🔽 descend un peu plus pour révéler l’image
+            child: Container(
+              width: size.width,
+              height: size.height * 0.58,
+              decoration: const BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.only(
+                  topLeft: Radius.circular(50),
+                  topRight: Radius.circular(50),
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black12,
+                    blurRadius: 8,
+                    offset: Offset(0, -2),
+                  ),
+                ],
+              ),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 40),
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
@@ -79,74 +57,71 @@ class WelcomeScreen extends StatelessWidget {
                           Navigator.pushNamed(context, '/login');
                         },
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.indigo.shade600,
+                          backgroundColor: const Color(0xFF0D47A1),
                           foregroundColor: Colors.white,
-                          elevation: 0,
                           shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(16),
+                            borderRadius: BorderRadius.circular(40),
                           ),
+                          elevation: 3,
                         ),
                         child: const Text(
-                          "Se connecter",
+                          "CONNEXION",
                           style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w600,
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: 1,
                           ),
                         ),
                       ),
                     ),
-                    const SizedBox(height: 16),
+                    const SizedBox(height: 20),
 
                     // Bouton Inscription
                     SizedBox(
                       width: double.infinity,
                       height: 56,
-                      child: OutlinedButton(
+                      child: ElevatedButton(
                         onPressed: () {
                           Navigator.pushNamed(context, '/register');
                         },
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: Colors.indigo.shade600,
-                          side: BorderSide(
-                            color: Colors.indigo.shade600,
-                            width: 2,
-                          ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF0D47A1),
+                          foregroundColor: Colors.white,
                           shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(16),
+                            borderRadius: BorderRadius.circular(40),
                           ),
+                          elevation: 3,
                         ),
                         child: const Text(
-                          "Créer un compte",
+                          "INSCRIPTION",
                           style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w600,
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: 1,
                           ),
                         ),
                       ),
                     ),
 
-                    const SizedBox(height: 32),
+                    const SizedBox(height: 40),
 
-                    // Lien d'aide optionnel
-                    TextButton(
-                      onPressed: () {
-                        // Navigation vers l'aide ou FAQ
-                      },
-                      child: Text(
-                        "Besoin d'aide ?",
-                        style: TextStyle(
-                          color: Colors.grey.shade600,
-                          fontSize: 14,
-                          fontWeight: FontWeight.w500,
-                        ),
+                    // Texte du bas
+                    const Text(
+                      "Reconnecter les parcours, relancer les liens",
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Color(0xFF0D47A1),
+                        fontWeight: FontWeight.w500,
+                        fontStyle: FontStyle.italic,
                       ),
+                      textAlign: TextAlign.center,
                     ),
                   ],
                 ),
               ),
-            ],
+            ),
           ),
-        ),
+        ],
       ),
     );
   }
