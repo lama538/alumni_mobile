@@ -4,6 +4,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models/ user.dart';
 import '../models/message_model.dart';
 import 'api_service.dart';
+import 'package:flutter/material.dart';
+
 
 class MessageService {
   // ✅ Récupérer tous les utilisateurs
@@ -50,6 +52,7 @@ class MessageService {
     if (senderId == null) throw Exception("Aucun utilisateur connecté trouvé");
 
     final url = Uri.parse('${ApiService.baseUrl}/messages');
+
     final response = await http.post(
       url,
       headers: {
@@ -64,13 +67,22 @@ class MessageService {
       }),
     );
 
+    debugPrint("sendMessage response: ${response.statusCode} -> ${response.body}");
+
     if (response.statusCode == 200 || response.statusCode == 201) {
       final data = jsonDecode(response.body);
+
+      // Vérification que tous les champs nécessaires existent
+      if (data['id'] == null || data['sender_id'] == null || data['receiver_id'] == null || data['contenu'] == null || data['created_at'] == null) {
+        throw Exception("Réponse du serveur invalide: $data");
+      }
+
       return AppMessage.fromJson(data);
     } else {
       throw Exception("Erreur send message: ${response.body}");
     }
   }
+
 
   static Future<List<AppMessage>> getReceivedMessages(String token) async {
     final prefs = await SharedPreferences.getInstance();

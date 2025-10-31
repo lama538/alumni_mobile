@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
-import '../models/offre_model.dart';
-import '../services/offre_service.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import 'offre_form_screen.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:url_launcher/url_launcher.dart';
+import '../models/offre_model.dart';
+import '../services/offre_service.dart';
+import 'offre_form_screen.dart';
 
 class OffreDetailScreen extends StatefulWidget {
   final String token;
@@ -23,56 +24,80 @@ class OffreDetailScreen extends StatefulWidget {
 class _OffreDetailScreenState extends State<OffreDetailScreen> {
   bool isApplying = false;
   bool alreadyApplied = false;
+  bool isLoadingApplications = false;
+  List applications = [];
+  int? currentUserId;
+  String? role;
 
   @override
   void initState() {
     super.initState();
-    checkAlreadyApplied();
+    loadUserData();
   }
 
-  void checkAlreadyApplied() async {
+  Future<void> loadUserData() async {
     final prefs = await SharedPreferences.getInstance();
-    final userId = prefs.getInt('user_id');
-    if (userId != null) {
-      final applied = await OffreService.hasApplied(widget.token, widget.offre.id, userId);
+    currentUserId = prefs.getInt('user_id');
+    role = prefs.getString('role') ?? '';
+    await checkAlreadyApplied();
+    await fetchApplications();
+  }
+
+  Future<void> checkAlreadyApplied() async {
+    if (currentUserId != null) {
+      final applied = await OffreService.hasApplied(
+        widget.token,
+        widget.offre.id,
+        currentUserId!,
+      );
       setState(() {
         alreadyApplied = applied;
       });
     }
   }
 
-  Future<String> getPublisherName() async {
-    final prefs = await SharedPreferences.getInstance();
-    final currentUserId = prefs.getInt('user_id');
-    final o = widget.offre;
+  Future<void> fetchApplications() async {
+    if (widget.offre.userId == currentUserId) {
+      setState(() => isLoadingApplications = true);
+      try {
+        final data = await OffreService.getApplications(
+          widget.token,
+          widget.offre.id,
+        );
+        setState(() {
+          applications = data;
+        });
+      } catch (e) {
+        debugPrint('Erreur fetch applications: $e');
+      } finally {
+        setState(() => isLoadingApplications = false);
+      }
+    }
+  }
 
-    if (o.userId != null && o.userId == currentUserId) {
+  Future<String> getPublisherName() async {
+    if (widget.offre.userId != null && widget.offre.userId == currentUserId) {
       return 'Vous';
-    } else if (o.userName != null && o.userName!.isNotEmpty) {
-      return o.userName!;
-    } else if (o.userId != null) {
-      return 'Utilisateur #${o.userId}';
+    } else if (widget.offre.userName != null && widget.offre.userName!.isNotEmpty) {
+      return widget.offre.userName!;
+    } else if (widget.offre.userId != null) {
+      return 'Utilisateur #${widget.offre.userId}';
     } else {
       return '—';
     }
   }
 
-  Future<bool> canEditOffer() async {
-    final prefs = await SharedPreferences.getInstance();
-    final currentUserId = prefs.getInt('user_id');
-    final role = prefs.getString('role') ?? '';
+  bool canEditOffer() {
     final isOwner = widget.offre.userId != null && widget.offre.userId == currentUserId;
     final canEditRole = role == 'admin' || role == 'alumni' || role == 'entreprise';
     return isOwner && canEditRole;
   }
 
-  Future<bool> canApply() async {
-    final prefs = await SharedPreferences.getInstance();
-    final role = prefs.getString('role') ?? '';
+  bool canApply() {
     return role == 'etudiant' || role == 'alumni';
   }
 
-  void apply() async {
+  Future<void> apply() async {
     if (alreadyApplied) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -85,9 +110,7 @@ class _OffreDetailScreenState extends State<OffreDetailScreen> {
       return;
     }
 
-    final prefs = await SharedPreferences.getInstance();
-    final studentId = prefs.getInt('user_id');
-    if (studentId == null) {
+    if (currentUserId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Veuillez vous connecter'),
@@ -352,7 +375,7 @@ class _OffreDetailScreenState extends State<OffreDetailScreen> {
       await OffreService.applyWithForm(
         token: widget.token,
         offreId: widget.offre.id,
-        studentId: studentId,
+        studentId: currentUserId!,
         prenom: prenomCtrl.text.trim(),
         nom: nomCtrl.text.trim(),
         email: emailCtrl.text.trim(),
@@ -370,16 +393,12 @@ class _OffreDetailScreenState extends State<OffreDetailScreen> {
           ),
         );
       }
+      await fetchApplications();
     } catch (e) {
-      String message = 'Erreur lors de la candidature';
-      if (e.toString().contains('Vous avez déjà postulé')) {
-        message = 'Vous avez déjà postulé à cette offre';
-        setState(() => alreadyApplied = true);
-      }
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(message),
+            content: Text('Erreur: $e'),
             backgroundColor: const Color(0xFFEF4444),
             behavior: SnackBarBehavior.floating,
           ),
@@ -418,6 +437,23 @@ class _OffreDetailScreenState extends State<OffreDetailScreen> {
         fillColor: Colors.white,
       ),
     );
+  }
+
+  Future<void> openCv(String url) async {
+    final uri = Uri.parse(url);
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } else {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Impossible d'ouvrir le CV"),
+            backgroundColor: Color(0xFFEF4444),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    }
   }
 
   @override
@@ -603,143 +639,351 @@ class _OffreDetailScreenState extends State<OffreDetailScreen> {
                     ),
                   ),
                   const SizedBox(height: 24),
-                  FutureBuilder<bool>(
-                    future: canEditOffer(),
-                    builder: (context, snapshot) {
-                      final canEdit = snapshot.data ?? false;
-                      if (!canEdit) return const SizedBox();
-
-                      return Column(
-                        children: [
-                          Row(
-                            children: [
-                              Expanded(
-                                child: OutlinedButton.icon(
-                                  onPressed: () async {
-                                    final result = await Navigator.push(
-                                      context,
-                                      MaterialPageRoute(
-                                        builder: (_) => OffreFormScreen(
-                                          token: widget.token,
-                                          existing: widget.offre,
-                                        ),
-                                      ),
-                                    );
-                                    if (result == true && mounted) {
-                                      Navigator.pop(context, true);
-                                    }
-                                  },
-                                  icon: const Icon(Icons.edit_rounded),
-                                  label: const Text('Modifier'),
-                                  style: OutlinedButton.styleFrom(
-                                    foregroundColor: const Color(0xFF2563EB),
-                                    side: const BorderSide(color: Color(0xFF2563EB), width: 2),
-                                    padding: const EdgeInsets.symmetric(vertical: 16),
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(12),
-                                    ),
+                  if (canEditOffer()) ...[
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            onPressed: () async {
+                              final result = await Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => OffreFormScreen(
+                                    token: widget.token,
+                                    existing: widget.offre,
                                   ),
                                 ),
+                              );
+                              if (result == true && mounted) {
+                                Navigator.pop(context, true);
+                              }
+                            },
+                            icon: const Icon(Icons.edit_rounded),
+                            label: const Text('Modifier'),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: const Color(0xFF2563EB),
+                              side: const BorderSide(color: Color(0xFF2563EB), width: 2),
+                              padding: const EdgeInsets.symmetric(vertical: 16),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
                               ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: OutlinedButton.icon(
-                                  onPressed: () async {
-                                    final confirmed = await showDialog<bool>(
-                                      context: context,
-                                      builder: (ctx) => AlertDialog(
-                                        shape: RoundedRectangleBorder(
-                                          borderRadius: BorderRadius.circular(16),
-                                        ),
-                                        title: const Text('Supprimer cette offre ?'),
-                                        content: const Text('Cette action est irréversible.'),
-                                        actions: [
-                                          TextButton(
-                                            onPressed: () => Navigator.pop(ctx, false),
-                                            child: const Text('Annuler'),
-                                          ),
-                                          TextButton(
-                                            onPressed: () => Navigator.pop(ctx, true),
-                                            style: TextButton.styleFrom(
-                                              foregroundColor: const Color(0xFFEF4444),
-                                            ),
-                                            child: const Text('Supprimer'),
-                                          ),
-                                        ],
-                                      ),
-                                    );
-                                    if (confirmed == true) {
-                                      await OffreService.delete(widget.token, widget.offre.id);
-                                      if (mounted) Navigator.pop(context, true);
-                                    }
-                                  },
-                                  icon: const Icon(Icons.delete_rounded),
-                                  label: const Text('Supprimer'),
-                                  style: OutlinedButton.styleFrom(
-                                    foregroundColor: const Color(0xFFEF4444),
-                                    side: const BorderSide(color: Color(0xFFEF4444), width: 2),
-                                    padding: const EdgeInsets.symmetric(vertical: 16),
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(12),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 16),
-                        ],
-                      );
-                    },
-                  ),
-                  FutureBuilder<bool>(
-                    future: canApply(),
-                    builder: (context, snapshot) {
-                      final showButton = snapshot.data ?? false;
-                      if (!showButton) return const SizedBox();
-
-                      return SizedBox(
-                        width: double.infinity,
-                        height: 56,
-                        child: ElevatedButton.icon(
-                          onPressed: (isApplying || alreadyApplied) ? null : apply,
-                          icon: isApplying
-                              ? const SizedBox(
-                            height: 20,
-                            width: 20,
-                            child: CircularProgressIndicator(
-                              color: Colors.white,
-                              strokeWidth: 2,
-                            ),
-                          )
-                              : Icon(
-                            alreadyApplied
-                                ? Icons.check_circle_rounded
-                                : Icons.send_rounded,
-                          ),
-                          label: Text(
-                            alreadyApplied ? 'Candidature envoyée' : 'Postuler maintenant',
-                            style: const TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: alreadyApplied
-                                ? const Color(0xFF10B981)
-                                : const Color(0xFF2563EB),
-                            foregroundColor: Colors.white,
-                            disabledBackgroundColor: const Color(0xFF10B981),
-                            disabledForegroundColor: Colors.white,
-                            elevation: 0,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(14),
                             ),
                           ),
                         ),
-                      );
-                    },
-                  ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            onPressed: () async {
+                              final confirmed = await showDialog<bool>(
+                                context: context,
+                                builder: (ctx) => AlertDialog(
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(16),
+                                  ),
+                                  title: const Text('Supprimer cette offre ?'),
+                                  content: const Text('Cette action est irréversible.'),
+                                  actions: [
+                                    TextButton(
+                                      onPressed: () => Navigator.pop(ctx, false),
+                                      child: const Text('Annuler'),
+                                    ),
+                                    TextButton(
+                                      onPressed: () => Navigator.pop(ctx, true),
+                                      style: TextButton.styleFrom(
+                                        foregroundColor: const Color(0xFFEF4444),
+                                      ),
+                                      child: const Text('Supprimer'),
+                                    ),
+                                  ],
+                                ),
+                              );
+                              if (confirmed == true) {
+                                await OffreService.delete(widget.token, widget.offre.id);
+                                if (mounted) Navigator.pop(context, true);
+                              }
+                            },
+                            icon: const Icon(Icons.delete_rounded),
+                            label: const Text('Supprimer'),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: const Color(0xFFEF4444),
+                              side: const BorderSide(color: Color(0xFFEF4444), width: 2),
+                              padding: const EdgeInsets.symmetric(vertical: 16),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                  ],
+                  if (canApply())
+                    SizedBox(
+                      width: double.infinity,
+                      height: 56,
+                      child: ElevatedButton.icon(
+                        onPressed: (isApplying || alreadyApplied) ? null : apply,
+                        icon: isApplying
+                            ? const SizedBox(
+                          height: 20,
+                          width: 20,
+                          child: CircularProgressIndicator(
+                            color: Colors.white,
+                            strokeWidth: 2,
+                          ),
+                        )
+                            : Icon(
+                          alreadyApplied ? Icons.check_circle_rounded : Icons.send_rounded,
+                        ),
+                        label: Text(
+                          alreadyApplied ? 'Candidature envoyée' : 'Postuler maintenant',
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: alreadyApplied
+                              ? const Color(0xFF10B981)
+                              : const Color(0xFF2563EB),
+                          foregroundColor: Colors.white,
+                          disabledBackgroundColor: const Color(0xFF10B981),
+                          disabledForegroundColor: Colors.white,
+                          elevation: 0,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                        ),
+                      ),
+                    ),
+                  if (applications.isNotEmpty) ...[
+                    const SizedBox(height: 32),
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFEFF6FF),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: const Icon(
+                            Icons.people_rounded,
+                            color: Color(0xFF2563EB),
+                            size: 24,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Text(
+                          'Candidatures (${applications.length})',
+                          style: const TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF0F172A),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    isLoadingApplications
+                        ? const Center(
+                      child: Padding(
+                        padding: EdgeInsets.all(40),
+                        child: CircularProgressIndicator(
+                          color: Color(0xFF2563EB),
+                          strokeWidth: 3,
+                        ),
+                      ),
+                    )
+                        : ListView.builder(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      itemCount: applications.length,
+                      itemBuilder: (context, index) {
+                        final app = applications[index];
+                        return Container(
+                          margin: const EdgeInsets.only(bottom: 12),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(16),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withOpacity(0.04),
+                                blurRadius: 10,
+                                offset: const Offset(0, 2),
+                              ),
+                            ],
+                          ),
+                          child: Padding(
+                            padding: const EdgeInsets.all(16),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    CircleAvatar(
+                                      radius: 24,
+                                      backgroundColor: const Color(0xFFEFF6FF),
+                                      child: Text(
+                                        '${app['prenom'][0]}${app['nom'][0]}'.toUpperCase(),
+                                        style: const TextStyle(
+                                          color: Color(0xFF2563EB),
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 16,
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            '${app['prenom']} ${app['nom']}',
+                                            style: const TextStyle(
+                                              fontSize: 16,
+                                              fontWeight: FontWeight.bold,
+                                              color: Color(0xFF0F172A),
+                                            ),
+                                          ),
+                                          const SizedBox(height: 2),
+                                          Text(
+                                            app['email'] ?? '',
+                                            style: const TextStyle(
+                                              fontSize: 13,
+                                              color: Color(0xFF64748B),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 12),
+                                Row(
+                                  children: [
+                                    const Icon(
+                                      Icons.phone_rounded,
+                                      size: 16,
+                                      color: Color(0xFF94A3B8),
+                                    ),
+                                    const SizedBox(width: 6),
+                                    Text(
+                                      app['telephone'] ?? '',
+                                      style: const TextStyle(
+                                        fontSize: 13,
+                                        color: Color(0xFF64748B),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 16),
+                                SizedBox(
+                                  width: double.infinity,
+                                  child: ElevatedButton.icon(
+                                    onPressed: () async {
+                                      final cvUrl = app['cv_url'] ?? '';
+
+                                      if (cvUrl.isEmpty) {
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          const SnackBar(
+                                            content: Text('Aucun CV disponible'),
+                                            backgroundColor: Color(0xFFEF4444),
+                                            behavior: SnackBarBehavior.floating,
+                                          ),
+                                        );
+                                        return;
+                                      }
+
+                                      if (cvUrl.endsWith('.pdf')) {
+                                        await openCv(cvUrl);
+                                      } else if (cvUrl.endsWith('.jpg') ||
+                                          cvUrl.endsWith('.jpeg') ||
+                                          cvUrl.endsWith('.png')) {
+                                        showDialog(
+                                          context: context,
+                                          builder: (ctx) => Dialog(
+                                            shape: RoundedRectangleBorder(
+                                              borderRadius: BorderRadius.circular(16),
+                                            ),
+                                            child: Column(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                Container(
+                                                  padding: const EdgeInsets.all(16),
+                                                  decoration: const BoxDecoration(
+                                                    color: Color(0xFF2563EB),
+                                                    borderRadius: BorderRadius.only(
+                                                      topLeft: Radius.circular(16),
+                                                      topRight: Radius.circular(16),
+                                                    ),
+                                                  ),
+                                                  child: Row(
+                                                    children: [
+                                                      const Icon(
+                                                        Icons.description_rounded,
+                                                        color: Colors.white,
+                                                      ),
+                                                      const SizedBox(width: 12),
+                                                      const Expanded(
+                                                        child: Text(
+                                                          'CV',
+                                                          style: TextStyle(
+                                                            color: Colors.white,
+                                                            fontSize: 18,
+                                                            fontWeight: FontWeight.bold,
+                                                          ),
+                                                        ),
+                                                      ),
+                                                      IconButton(
+                                                        icon: const Icon(
+                                                          Icons.close_rounded,
+                                                          color: Colors.white,
+                                                        ),
+                                                        onPressed: () => Navigator.pop(ctx),
+                                                      ),
+                                                    ],
+                                                  ),
+                                                ),
+                                                InteractiveViewer(
+                                                  child: Image.network(
+                                                    cvUrl,
+                                                    fit: BoxFit.contain,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        );
+                                      } else {
+                                        await openCv(cvUrl);
+                                      }
+                                    },
+                                    icon: const Icon(Icons.file_present_rounded),
+                                    label: const Text(
+                                      'Voir le CV',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: const Color(0xFF2563EB),
+                                      foregroundColor: Colors.white,
+                                      padding: const EdgeInsets.symmetric(vertical: 14),
+                                      elevation: 0,
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(12),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ],
                 ],
               ),
             ),

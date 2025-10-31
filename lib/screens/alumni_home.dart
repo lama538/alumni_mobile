@@ -8,6 +8,7 @@ import 'AdminActualitesScreen.dart';
 import 'calendar_screen.dart';
 import 'group_list_screen.dart';
 import 'offre_list_screen.dart';
+import 'profil_screen.dart';
 
 class AlumniHome extends StatefulWidget {
   const AlumniHome({super.key});
@@ -19,6 +20,7 @@ class AlumniHome extends StatefulWidget {
 class _AlumniHomeState extends State<AlumniHome> {
   String? userToken;
   int? userId;
+  String? userPhoto;
   bool isLoading = true;
   int _currentIndex = 0;
 
@@ -28,20 +30,68 @@ class _AlumniHomeState extends State<AlumniHome> {
     _loadUserData();
   }
 
+  // ---------------- Fonction pour récupérer correctement l'URL de la photo ----------------
+  String getUserPhotoUrl(String? photo) {
+    if (photo == null || photo.isEmpty) return '';
+    if (photo.startsWith('http')) return photo;
+    return 'http://10.0.2.2:8000/storage/$photo';
+  }
+
+  ImageProvider getUserAvatar() {
+    if (userPhoto != null && userPhoto!.isNotEmpty) {
+      return NetworkImage(getUserPhotoUrl(userPhoto));
+    } else {
+      return const AssetImage('assets/images/default_avatar.png');
+    }
+  }
+
   Future<void> _loadUserData() async {
     SharedPreferences prefs = await SharedPreferences.getInstance();
-    setState(() {
-      userToken = prefs.getString('token');
-      userId = prefs.getInt('user_id');
-      isLoading = false;
-    });
-    debugPrint("📦 Token chargé : $userToken");
-    debugPrint("📦 ID utilisateur : $userId");
+    final token = prefs.getString('token');
+    final id = prefs.getInt('user_id');
+
+    if (token == null || id == null) {
+      setState(() => isLoading = false);
+      return;
+    }
+
+    try {
+      final response = await http.get(
+        Uri.parse('http://10.0.2.2:8000/api/profil/$id'),
+        headers: {
+          "Authorization": "Bearer $token",
+          "Accept": "application/json",
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body)['data'];
+        setState(() {
+          userToken = token;
+          userId = id;
+          userPhoto = data['photo'] ?? '';
+          isLoading = false;
+        });
+      } else {
+        debugPrint('Erreur récupération profil: ${response.statusCode}');
+        setState(() {
+          userToken = token;
+          userId = id;
+          isLoading = false;
+        });
+      }
+    } catch (e) {
+      debugPrint("Erreur réseau profil: $e");
+      setState(() {
+        userToken = token;
+        userId = id;
+        isLoading = false;
+      });
+    }
   }
 
   void _onTabTapped(int index) {
     if (index == 2) {
-      // Bouton central "+"
       Navigator.push(
         context,
         MaterialPageRoute(builder: (context) => const AdminActualitesScreen()),
@@ -77,12 +127,26 @@ class _AlumniHomeState extends State<AlumniHome> {
         leading: Padding(
           padding: const EdgeInsets.all(8.0),
           child: GestureDetector(
-            onTap: () {
-              Navigator.pushNamed(context, '/alumniProfile');
+            onTap: () async {
+              // Redirection vers ProfilScreen et attendre mise à jour éventuelle
+              final updatedPhoto = await Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const ProfilScreen(),
+                ),
+              );
+
+              // Rafraîchit l'avatar si une nouvelle photo est renvoyée
+              if (updatedPhoto != null && updatedPhoto is String) {
+                setState(() {
+                  userPhoto = updatedPhoto;
+                });
+              }
             },
             child: CircleAvatar(
-              backgroundColor: const Color(0xFF2196F3),
-              child: const Icon(Icons.person, color: Colors.white, size: 24),
+              radius: 20,
+              backgroundColor: Colors.grey[200],
+              backgroundImage: getUserAvatar(),
             ),
           ),
         ),
@@ -196,7 +260,7 @@ class _AlumniHomeState extends State<AlumniHome> {
   }
 }
 
-// Screen pour le fil d'actualités
+// ==================== Fil d'actualités ====================
 class ActualitesFeedScreen extends StatefulWidget {
   final String? userToken;
   const ActualitesFeedScreen({super.key, this.userToken});
@@ -221,10 +285,12 @@ class _ActualitesFeedScreenState extends State<ActualitesFeedScreen> {
       final response = await http.get(
         Uri.parse('http://10.0.2.2:8000/api/actualites'),
         headers: {
-          if (widget.userToken != null) "Authorization": "Bearer ${widget.userToken}",
+          if (widget.userToken != null)
+            "Authorization": "Bearer ${widget.userToken}",
           "Accept": "application/json",
         },
       );
+
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         setState(() {
@@ -244,6 +310,7 @@ class _ActualitesFeedScreenState extends State<ActualitesFeedScreen> {
     if (widget.userToken == null) return;
     final liked = act['liked_by_user'] ?? false;
     final url = Uri.parse('http://10.0.2.2:8000/api/actualites/${act['id']}/like');
+
     try {
       final response = await http.post(
         url,
@@ -307,7 +374,12 @@ class _ActualitesFeedScreenState extends State<ActualitesFeedScreen> {
         itemCount: actualites.length,
         itemBuilder: (context, index) {
           final act = actualites[index];
-          final imageUrl = act['image']?.toString().isNotEmpty == true ? act['image'] : null;
+          String? imageUrl = act['image'];
+          if (imageUrl != null && imageUrl.isNotEmpty) {
+            if (!imageUrl.startsWith('http')) {
+              imageUrl = 'http://10.0.2.2:8000/storage/$imageUrl';
+            }
+          }
           final date = act['created_at'] != null
               ? DateFormat('dd MMM yyyy').format(DateTime.parse(act['created_at']))
               : '';
@@ -334,7 +406,7 @@ class _ActualitesFeedScreenState extends State<ActualitesFeedScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  if (imageUrl != null)
+                  if (imageUrl != null && imageUrl.isNotEmpty)
                     Image.network(
                       imageUrl,
                       fit: BoxFit.cover,
@@ -418,10 +490,7 @@ class _ActualitesFeedScreenState extends State<ActualitesFeedScreen> {
                           ),
                         ),
                         const SizedBox(height: 16),
-                        Container(
-                          height: 1,
-                          color: const Color(0xFFF0F0F0),
-                        ),
+                        Container(height: 1, color: const Color(0xFFF0F0F0)),
                         const SizedBox(height: 8),
                         Row(
                           children: [

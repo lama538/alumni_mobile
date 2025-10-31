@@ -74,6 +74,18 @@ class OffreService {
       throw Exception('Erreur update offre: ${res.body}');
     }
   }
+  static Future<List> getApplications(String token, int offreId) async {
+    final url = Uri.parse('http://10.0.2.2:8000/api/offres/$offreId/applications');
+
+    final response = await http.get(url, headers: {'Authorization': 'Bearer $token'});
+
+    if (response.statusCode == 200) {
+      return List.from(jsonDecode(response.body));
+    } else {
+      throw Exception('Erreur lors de la récupération des candidatures');
+    }
+  }
+
 
   // 🔹 Supprimer une offre
   static Future<void> delete(String token, int id) async {
