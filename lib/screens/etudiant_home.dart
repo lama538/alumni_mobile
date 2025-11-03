@@ -4,6 +4,7 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:intl/intl.dart';
+import 'package:video_player/video_player.dart';
 import 'actualite_details_screen.dart';
 import 'AdminActualitesScreen.dart';
 import 'calendar_screen.dart';
@@ -11,6 +12,7 @@ import 'group_list_screen.dart';
 import 'offre_list_screen.dart';
 import 'messaging_screen.dart';
 import 'profil_screen.dart';
+import 'UserProfilScreen.dart';
 
 class EtudiantHome extends StatefulWidget {
   const EtudiantHome({super.key});
@@ -22,6 +24,7 @@ class EtudiantHome extends StatefulWidget {
 class _EtudiantHomeState extends State<EtudiantHome> {
   String? userToken;
   int? userId;
+  String? userPhoto;
   bool isLoading = true;
   int _currentIndex = 0;
 
@@ -31,20 +34,68 @@ class _EtudiantHomeState extends State<EtudiantHome> {
     _loadUserData();
   }
 
+  String getUserPhotoUrl(String? photo) {
+    if (photo == null || photo.isEmpty) return '';
+    if (photo.startsWith('http')) return photo;
+    return 'http://10.0.2.2:8000/storage/$photo';
+  }
+
+  ImageProvider getUserAvatar() {
+    if (userPhoto != null && userPhoto!.isNotEmpty) {
+      return NetworkImage(userPhoto!);
+    } else {
+      return const AssetImage('assets/images/default_avatar.png');
+    }
+  }
+
   Future<void> _loadUserData() async {
     SharedPreferences prefs = await SharedPreferences.getInstance();
-    setState(() {
-      userToken = prefs.getString('token');
-      userId = prefs.getInt('user_id');
-      isLoading = false;
-    });
-    debugPrint("📦 Token chargé : $userToken");
-    debugPrint("📦 ID utilisateur : $userId");
+    final token = prefs.getString('token');
+    final id = prefs.getInt('user_id');
+
+    if (token == null || id == null) {
+      setState(() => isLoading = false);
+      return;
+    }
+
+    try {
+      final response = await http.get(
+        Uri.parse('http://10.0.2.2:8000/api/profile'),
+        headers: {
+          "Authorization": "Bearer $token",
+          "Accept": "application/json",
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final profil = data['profil'];
+        final user = data['user'];
+
+        setState(() {
+          userToken = token;
+          userId = id;
+          userPhoto = (user?['photo'] ?? profil?['photo'] ?? '').toString();
+          isLoading = false;
+        });
+      } else {
+        setState(() {
+          userToken = token;
+          userId = id;
+          isLoading = false;
+        });
+      }
+    } catch (e) {
+      setState(() {
+        userToken = token;
+        userId = id;
+        isLoading = false;
+      });
+    }
   }
 
   void _onTabTapped(int index) {
     if (index == 2) {
-      // Bouton central "+"
       Navigator.push(
         context,
         MaterialPageRoute(builder: (context) => const AdminActualitesScreen()),
@@ -80,17 +131,27 @@ class _EtudiantHomeState extends State<EtudiantHome> {
         leading: Padding(
           padding: const EdgeInsets.all(8.0),
           child: GestureDetector(
-            onTap: () {
-              Navigator.pushNamed(context, '/profile');
+            onTap: () async {
+              final updatedPhoto = await Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const ProfilScreen(),
+                ),
+              );
+
+              if (updatedPhoto != null) {
+                await _loadUserData();
+              }
             },
             child: CircleAvatar(
-              backgroundColor: const Color(0xFF5C6BC0),
-              child: const Icon(Icons.person, color: Colors.white, size: 24),
+              radius: 20,
+              backgroundColor: Colors.grey[200],
+              backgroundImage: getUserAvatar(),
             ),
           ),
         ),
         title: const Text(
-          "ISI RELINK",
+          "   ISI RELINK",
           style: TextStyle(
             fontSize: 20,
             fontWeight: FontWeight.w700,
@@ -202,7 +263,7 @@ class _EtudiantHomeState extends State<EtudiantHome> {
   }
 }
 
-// Screen pour le fil d'actualités
+// ==================== ActualitesFeedScreen ====================
 class ActualitesFeedScreen extends StatefulWidget {
   final String? userToken;
   const ActualitesFeedScreen({super.key, this.userToken});
@@ -219,6 +280,12 @@ class _ActualitesFeedScreenState extends State<ActualitesFeedScreen> {
   void initState() {
     super.initState();
     _loadActualites();
+  }
+
+  String getAuthorPhotoUrl(String? photo) {
+    if (photo == null || photo.isEmpty) return '';
+    if (photo.startsWith('http')) return photo;
+    return 'http://10.0.2.2:8000/storage/$photo';
   }
 
   Future<void> _loadActualites() async {
@@ -313,11 +380,23 @@ class _ActualitesFeedScreenState extends State<ActualitesFeedScreen> {
         itemCount: actualites.length,
         itemBuilder: (context, index) {
           final act = actualites[index];
-          final imageUrl = act['image']?.toString().isNotEmpty == true ? act['image'] : null;
+
+          String? imageUrl = act['image'];
+          String? videoUrl = act['video'];
+
+          if (imageUrl != null && imageUrl.isNotEmpty && !imageUrl.startsWith('http')) {
+            imageUrl = 'http://10.0.2.2:8000/storage/$imageUrl';
+          }
+          if (videoUrl != null && videoUrl.isNotEmpty && !videoUrl.startsWith('http')) {
+            videoUrl = 'http://10.0.2.2:8000/storage/$videoUrl';
+          }
+
           final date = act['created_at'] != null
               ? DateFormat('dd MMM yyyy').format(DateTime.parse(act['created_at']))
               : '';
           final auteur = act['auteur']?['name'] ?? 'Anonyme';
+          final auteurPhoto = act['auteur']?['photo'];
+          final authorPhotoUrl = getAuthorPhotoUrl(auteurPhoto);
           final liked = act['liked_by_user'] ?? false;
           final likesCount = act['likes_count'] ?? 0;
           final commentsCount = act['comments_count'] ?? 0;
@@ -340,7 +419,13 @@ class _ActualitesFeedScreenState extends State<ActualitesFeedScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  if (imageUrl != null)
+                  if (videoUrl != null && videoUrl.isNotEmpty)
+                    SizedBox(
+                      width: double.infinity,
+                      height: 200,
+                      child: VideoPlayerWidget(videoUrl: videoUrl),
+                    )
+                  else if (imageUrl != null && imageUrl.isNotEmpty)
                     Image.network(
                       imageUrl,
                       fit: BoxFit.cover,
@@ -365,15 +450,39 @@ class _ActualitesFeedScreenState extends State<ActualitesFeedScreen> {
                       children: [
                         Row(
                           children: [
-                            CircleAvatar(
-                              radius: 18,
-                              backgroundColor: const Color(0xFF5C6BC0),
-                              child: Text(
-                                auteur[0].toUpperCase(),
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w600,
+                            GestureDetector(
+                              onTap: () {
+                                if (act['auteur']?['id'] != null) {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (context) =>
+                                          UserProfilScreen(userId: act['auteur']['id']),
+                                    ),
+                                  );
+                                }
+                              },
+                              child: CircleAvatar(
+                                radius: 18,
+                                backgroundColor: Colors.grey[300],
+                                child: authorPhotoUrl.isNotEmpty
+                                    ? ClipOval(
+                                  child: Image.network(
+                                    authorPhotoUrl,
+                                    fit: BoxFit.cover,
+                                    width: 36,
+                                    height: 36,
+                                    errorBuilder: (_, __, ___) => Icon(
+                                      Icons.person,
+                                      color: Colors.grey[600],
+                                      size: 20,
+                                    ),
+                                  ),
+                                )
+                                    : Icon(
+                                  Icons.person,
+                                  color: Colors.grey[600],
+                                  size: 20,
                                 ),
                               ),
                             ),
@@ -382,12 +491,26 @@ class _ActualitesFeedScreenState extends State<ActualitesFeedScreen> {
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Text(
-                                    auteur,
-                                    style: const TextStyle(
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.w600,
-                                      color: Color(0xFF1A1A1A),
+                                  GestureDetector(
+                                    onTap: () {
+                                      if (act['auteur']?['id'] != null) {
+                                        Navigator.push(
+                                          context,
+                                          MaterialPageRoute(
+                                            builder: (context) =>
+                                                UserProfilScreen(userId: act['auteur']['id']),
+                                          ),
+                                        );
+                                      }
+                                    },
+                                    child: Text(
+                                      auteur,
+                                      style: const TextStyle(
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w600,
+                                        color: Color(0xFF1A1A1A),
+                                        decoration: TextDecoration.underline,
+                                      ),
                                     ),
                                   ),
                                   Text(
@@ -506,6 +629,66 @@ class _ActualitesFeedScreenState extends State<ActualitesFeedScreen> {
             ),
           );
         },
+      ),
+    );
+  }
+}
+
+// ==================== Widget Vidéo ====================
+class VideoPlayerWidget extends StatefulWidget {
+  final String videoUrl;
+  const VideoPlayerWidget({super.key, required this.videoUrl});
+
+  @override
+  State<VideoPlayerWidget> createState() => _VideoPlayerWidgetState();
+}
+
+class _VideoPlayerWidgetState extends State<VideoPlayerWidget> {
+  late VideoPlayerController _controller;
+  bool isInitialized = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = VideoPlayerController.network(widget.videoUrl)
+      ..initialize().then((_) {
+        setState(() {
+          isInitialized = true;
+        });
+      });
+    _controller.setLooping(true);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!isInitialized) {
+      return Container(
+        height: 200,
+        color: Colors.black12,
+        child: const Center(child: CircularProgressIndicator()),
+      );
+    }
+    return GestureDetector(
+      onTap: () {
+        setState(() {
+          _controller.value.isPlaying
+              ? _controller.pause()
+              : _controller.play();
+        });
+      },
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          VideoPlayer(_controller),
+          if (!_controller.value.isPlaying)
+            const Icon(Icons.play_arrow, color: Colors.white, size: 50),
+        ],
       ),
     );
   }

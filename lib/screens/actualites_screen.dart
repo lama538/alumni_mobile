@@ -5,6 +5,52 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:intl/intl.dart';
 import 'actualite_details_screen.dart';
 import 'AdminActualitesScreen.dart';
+import 'package:video_player/video_player.dart';
+import 'package:chewie/chewie.dart';
+
+// Widget pour afficher les vidéos
+class VideoPlayerWidget extends StatefulWidget {
+  final String url;
+  const VideoPlayerWidget({required this.url, super.key});
+
+  @override
+  State<VideoPlayerWidget> createState() => _VideoPlayerWidgetState();
+}
+
+class _VideoPlayerWidgetState extends State<VideoPlayerWidget> {
+  late VideoPlayerController _controller;
+  ChewieController? _chewieController;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = VideoPlayerController.network(widget.url)
+      ..initialize().then((_) {
+        _chewieController = ChewieController(
+          videoPlayerController: _controller,
+          autoPlay: false,
+          looping: false,
+          showControls: true,
+        );
+        setState(() {});
+      });
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    _chewieController?.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_chewieController != null && _controller.value.isInitialized) {
+      return Chewie(controller: _chewieController!);
+    }
+    return const Center(child: CircularProgressIndicator());
+  }
+}
 
 class ActualitesScreen extends StatefulWidget {
   const ActualitesScreen({super.key});
@@ -143,12 +189,11 @@ class _ActualitesScreenState extends State<ActualitesScreen> {
           itemBuilder: (context, index) {
             final act = actualites[index];
 
-            final imageUrl = act['image']?.toString().isNotEmpty == true
-                ? act['image']
-                : null;
+            final imageUrl = act['image']?.toString().isNotEmpty == true ? act['image'] : null;
+            final videoUrl = act['video']?.toString().isNotEmpty == true ? act['video'] : null;
+
             final date = act['created_at'] != null
-                ? DateFormat('dd MMM yyyy').format(
-                DateTime.parse(act['created_at']))
+                ? DateFormat('dd MMM yyyy').format(DateTime.parse(act['created_at']))
                 : '';
             final auteur = act['auteur']?['name'] ?? 'Anonyme';
             final liked = act['liked_by_user'] ?? false;
@@ -191,6 +236,24 @@ class _ActualitesScreenState extends State<ActualitesScreen> {
                                 ),
                               ),
                             ),
+                      )
+                    else if (videoUrl != null)
+                      SizedBox(
+                        height: 200,
+                        width: double.infinity,
+                        child: VideoPlayerWidget(url: videoUrl),
+                      )
+                    else
+                      Container(
+                        height: 200,
+                        color: const Color(0xFFF0F0F0),
+                        child: const Center(
+                          child: Icon(
+                            Icons.article_outlined,
+                            size: 60,
+                            color: Color(0xFFBDBDBD),
+                          ),
+                        ),
                       ),
                     Padding(
                       padding: const EdgeInsets.all(16),
@@ -302,8 +365,7 @@ class _ActualitesScreenState extends State<ActualitesScreen> {
                                     context,
                                     MaterialPageRoute(
                                       builder: (context) =>
-                                          ActualiteDetailsScreen(
-                                              actualite: act),
+                                          ActualiteDetailsScreen(actualite: act),
                                     ),
                                   );
                                 },

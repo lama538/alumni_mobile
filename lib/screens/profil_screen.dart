@@ -54,7 +54,6 @@ class _ProfilScreenState extends State<ProfilScreen> {
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        debugPrint("Données profil reçues: $data"); // Debug
         setState(() {
           profil = data['profil'];
           user = data['user'];
@@ -71,10 +70,6 @@ class _ProfilScreenState extends State<ProfilScreen> {
 
           _imageFile = null;
         });
-
-        // Debug pour voir quelle photo est disponible
-        debugPrint("Photo du profil: ${profil?['photo']}");
-        debugPrint("Photo du user: ${user?['photo']}");
       } else {
         setState(() {
           profil = null;
@@ -157,15 +152,6 @@ class _ProfilScreenState extends State<ProfilScreen> {
         );
 
         await fetchProfil();
-
-        // Retourner la photo du profil mis à jour
-        String? photoToReturn = profil?['photo'];
-        if (photoToReturn != null && photoToReturn.isNotEmpty) {
-          Navigator.pop(context, photoToReturn);
-        } else {
-          Navigator.pop(context, true);
-        }
-
         setState(() => isEditing = false);
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -242,36 +228,98 @@ class _ProfilScreenState extends State<ProfilScreen> {
   }
 
   ImageProvider _getAvatar() {
-    // Priorité 1: Image sélectionnée localement
-    if (_imageFile != null) {
-      debugPrint("Affichage: Image locale");
-      return FileImage(_imageFile!);
-    }
-
-    // Priorité 2: Photo du profil
-    if (profil != null && profil!['photo'] != null && profil!['photo'].toString().isNotEmpty) {
+    if (_imageFile != null) return FileImage(_imageFile!);
+    if (profil != null &&
+        profil!['photo'] != null &&
+        profil!['photo'].toString().isNotEmpty) {
       String url = profil!['photo'].toString();
-      if (!url.startsWith('http')) {
-        url = 'http://10.0.2.2:8000/storage/$url';
-      }
-      debugPrint("Affichage: Photo du profil - $url");
+      if (!url.startsWith('http')) url = '$baseUrl$url';
       return NetworkImage(url);
     }
-
-    // Priorité 3: Photo du user (si le profil n'a pas de photo)
-    if (user != null && user!['photo'] != null && user!['photo'].toString().isNotEmpty) {
+    if (user != null &&
+        user!['photo'] != null &&
+        user!['photo'].toString().isNotEmpty) {
       String url = user!['photo'].toString();
-      if (!url.startsWith('http')) {
-        url = 'http://10.0.2.2:8000/storage/$url';
-      }
-      debugPrint("Affichage: Photo du user - $url");
+      if (!url.startsWith('http')) url = '$baseUrl$url';
       return NetworkImage(url);
     }
-
-    // Par défaut: Avatar par défaut
-    debugPrint("Affichage: Avatar par défaut");
     return const AssetImage('assets/images/default_avatar.png');
   }
+
+  Future<void> _showListeUtilisateurs(String type) async {
+    setState(() => isLoading = true);
+    List<dynamic> liste = [];
+    try {
+      SharedPreferences prefs = await SharedPreferences.getInstance();
+      String? token = prefs.getString('token');
+      if (token == null) return;
+
+      // Déterminer l'URL selon le type
+      String url = '';
+      int userId = user?['id'] ?? 0;
+      if (type == "Abonnés") {
+        url = 'http://10.0.2.2:8000/api/profil/abonnes/$userId';
+      } else if (type == "Abonnements") {
+        url = 'http://10.0.2.2:8000/api/profil/abonnements/$userId';
+      }
+
+      final response = await http.get(
+        Uri.parse(url),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Accept': 'application/json',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        liste = jsonDecode(response.body);
+      } else {
+        debugPrint("Erreur fetch $type: ${response.statusCode}");
+      }
+    } catch (e) {
+      debugPrint("Erreur fetch $type: $e");
+    } finally {
+      setState(() => isLoading = false);
+    }
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(type),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: liste.isEmpty
+              ? const Text("Aucun utilisateur à afficher")
+              : ListView.builder(
+            shrinkWrap: true,
+            itemCount: liste.length,
+            itemBuilder: (context, index) {
+              final utilisateur = liste[index];
+              return ListTile(
+                leading: CircleAvatar(
+                  backgroundImage: utilisateur['photo'] != null
+                      ? NetworkImage(utilisateur['photo'])
+                      : const AssetImage(
+                      'assets/images/default_avatar.png') as ImageProvider,
+                ),
+                title: Text(utilisateur['name'] ?? ''),
+                subtitle: Text(utilisateur['email'] ?? ''),
+              );
+            },
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text("Fermer"),
+          ),
+        ],
+      ),
+    );
+  }
+
+
+
 
   @override
   Widget build(BuildContext context) {
@@ -380,14 +428,20 @@ class _ProfilScreenState extends State<ProfilScreen> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    _buildStatItem("Abonnements", abonnementsCount),
+                    GestureDetector(
+                      onTap: () => _showListeUtilisateurs("Abonnements"),
+                      child: _buildStatItem("Abonnements", abonnementsCount),
+                    ),
                     Container(
                       height: 40,
                       width: 1,
                       color: Colors.grey[300],
                       margin: const EdgeInsets.symmetric(horizontal: 24),
                     ),
-                    _buildStatItem("Abonnés", abonnesCount),
+                    GestureDetector(
+                      onTap: () => _showListeUtilisateurs("Abonnés"),
+                      child: _buildStatItem("Abonnés", abonnesCount),
+                    ),
                   ],
                 ),
                 if (profil?['bio'] != null && profil!['bio'].toString().isNotEmpty)
@@ -574,7 +628,8 @@ class _ProfilScreenState extends State<ProfilScreen> {
                             decoration: BoxDecoration(
                               color: const Color(0xFF2196F3),
                               shape: BoxShape.circle,
-                              border: Border.all(color: Colors.white, width: 2),
+                              border:
+                              Border.all(color: Colors.white, width: 2),
                             ),
                             child: const Icon(
                               Icons.camera_alt,

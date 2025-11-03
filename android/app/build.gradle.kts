@@ -13,19 +13,16 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
-        isCoreLibraryDesugaringEnabled = true // 🔹 Ajouté
+        // 🔹 Permet l'utilisation des API Java 8+ dans Android
+        isCoreLibraryDesugaringEnabled = true
     }
-
 
     kotlinOptions {
         jvmTarget = JavaVersion.VERSION_11.toString()
     }
 
     defaultConfig {
-        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
         applicationId = "com.example.untitled"
-        // You can update the following values to match your application needs.
-        // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
@@ -34,14 +31,13 @@ android {
 
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
+            // 🔹 Utilise la configuration de signature debug pour simplifier
             signingConfig = signingConfigs.getByName("debug")
+            // 🔹 Optimisations de build
+            isMinifyEnabled = false
+            isShrinkResources = false
         }
     }
-
-
-
 }
 
 flutter {
@@ -49,9 +45,11 @@ flutter {
 }
 
 dependencies {
-    // 🔹 Core library desugaring
-    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.0.3")
+    // ✅ Version corrigée — compatible avec flutter_local_notifications
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
 
-    // 🔹 Flutter local notifications
+    // ✅ Google Play services (si nécessaire)
     implementation("com.google.android.gms:play-services-base:18.2.0")
+
+    // 🔹 Tu peux ajouter ici d'autres dépendances Flutter si besoin
 }

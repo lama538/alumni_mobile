@@ -79,9 +79,7 @@ class NotificationService {
         body,
         scheduledDate,
         platformDetails,
-        androidAllowWhileIdle: true,
-        uiLocalNotificationDateInterpretation:
-        UILocalNotificationDateInterpretation.wallClockTime,
+        androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle, // ✅ correct
       );
       debugPrint("🕒 Notification planifiée: $title à $scheduledDate");
     } catch (e) {
