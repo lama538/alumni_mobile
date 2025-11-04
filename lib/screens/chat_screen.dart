@@ -1,4 +1,8 @@
+// lib/screens/chat_screen.dart
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:video_player/video_player.dart';
 import '../models/ user.dart';
 import '../models/message_model.dart';
 import '../services/message_service.dart';
@@ -22,56 +26,35 @@ class ChatScreen extends StatefulWidget {
 class _ChatScreenState extends State<ChatScreen> {
   List<AppMessage> messages = [];
   final TextEditingController messageController = TextEditingController();
-  final ScrollController _scrollController = ScrollController();
-  bool isLoading = false;
+  final ScrollController scrollController = ScrollController();
+  bool isLoading = true;
   bool isSending = false;
+
+  File? selectedMedia;
+  String? selectedMediaType;
+  VideoPlayerController? previewVideoController;
+  Map<int, VideoPlayerController> videoControllers = {};
 
   @override
   void initState() {
     super.initState();
     fetchMessages();
-    markMessagesRead();
   }
 
   @override
   void dispose() {
-    _scrollController.dispose();
     messageController.dispose();
+    scrollController.dispose();
+    previewVideoController?.dispose();
+    videoControllers.forEach((key, controller) => controller.dispose());
     super.dispose();
   }
 
-  void markMessagesRead() async {
+  Future<void> fetchMessages() async {
     try {
-      await MessageService.markMessagesAsRead(
-        widget.token,
-        widget.selectedUser.id!,
-      );
-      setState(() {
-        for (var msg in messages) {
-          if (msg.senderId == widget.selectedUser.id) {
-            msg.isRead = true;
-          }
-        }
-      });
-    } catch (e) {
-      debugPrint("Erreur mark messages as read: $e");
-    }
-  }
-
-  void fetchMessages() async {
-    setState(() => isLoading = true);
-    try {
-      final data = await MessageService.getMessages(
-        widget.token,
-        widget.selectedUser.id!,
-      );
+      final data = await MessageService.getMessages(widget.token, widget.selectedUser.id!);
       setState(() => messages = data);
-
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (_scrollController.hasClients) {
-          _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
-        }
-      });
+      markMessagesRead();
     } catch (e) {
       debugPrint("Erreur fetch messages: $e");
     } finally {
@@ -79,94 +62,554 @@ class _ChatScreenState extends State<ChatScreen> {
     }
   }
 
-  void sendMessage() async {
-    final text = messageController.text.trim();
-    if (text.isEmpty) return;
+  Future<void> markMessagesRead() async {
+    try {
+      await MessageService.markMessagesAsRead(widget.token, widget.selectedUser.id!);
+      setState(() {
+        for (var msg in messages) {
+          if (msg.senderId == widget.selectedUser.id) msg.isRead = true;
+        }
+      });
+    } catch (e) {
+      debugPrint("Erreur mark read: $e");
+    }
+  }
 
-    final tempMessage = AppMessage(
+  Future<void> pickMedia() async {
+    final picker = ImagePicker();
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (_) => Container(
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        child: SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const SizedBox(height: 12),
+              Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade300,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const SizedBox(height: 24),
+              ListTile(
+                leading: Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF3B82F6).withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Icon(Icons.image_rounded, color: Color(0xFF3B82F6)),
+                ),
+                title: const Text('Image', style: TextStyle(fontWeight: FontWeight.w600)),
+                onTap: () async {
+                  Navigator.pop(context);
+                  final pickedFile = await picker.pickImage(source: ImageSource.gallery);
+                  if (pickedFile != null) {
+                    setState(() {
+                      selectedMedia = File(pickedFile.path);
+                      selectedMediaType = "image";
+                      previewVideoController?.dispose();
+                      previewVideoController = null;
+                    });
+                  }
+                },
+              ),
+              ListTile(
+                leading: Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFEC4899).withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Icon(Icons.videocam_rounded, color: Color(0xFFEC4899)),
+                ),
+                title: const Text('Vidéo', style: TextStyle(fontWeight: FontWeight.w600)),
+                onTap: () async {
+                  Navigator.pop(context);
+                  final pickedFile = await picker.pickVideo(source: ImageSource.gallery);
+                  if (pickedFile != null) {
+                    previewVideoController?.dispose();
+                    previewVideoController = VideoPlayerController.file(File(pickedFile.path))
+                      ..initialize().then((_) {
+                        setState(() {});
+                      });
+                    setState(() {
+                      selectedMedia = File(pickedFile.path);
+                      selectedMediaType = "video";
+                    });
+                  }
+                },
+              ),
+              const SizedBox(height: 16),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> sendMessage() async {
+    final text = messageController.text.trim();
+    if (text.isEmpty && selectedMedia == null) return;
+
+    final tempMsg = AppMessage(
       id: DateTime.now().millisecondsSinceEpoch,
       senderId: widget.currentUserId,
       receiverId: widget.selectedUser.id!,
       contenu: text,
+      media: selectedMedia?.path,
+      mediaType: selectedMediaType,
       isRead: false,
       senderName: "Moi",
       receiverName: widget.selectedUser.name,
-      senderEmail: "moi@example.com",
       createdAt: DateTime.now(),
     );
 
     setState(() {
-      messages.add(tempMessage);
-      messageController.clear();
+      messages.add(tempMsg);
       isSending = true;
     });
 
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (_scrollController.hasClients) {
-        _scrollController.animateTo(
-          _scrollController.position.maxScrollExtent,
-          duration: const Duration(milliseconds: 300),
-          curve: Curves.easeOut,
-        );
-      }
-    });
+    messageController.clear();
 
     try {
-      final sentMessage = await MessageService.sendMessage(
+      final sentMsg = await MessageService.sendMessageWithMedia(
         widget.token,
         widget.selectedUser.id!,
         text,
+        selectedMedia,
       );
 
-      final index = messages.indexOf(tempMessage);
-      if (index != -1) {
-        setState(() {
-          messages[index] = sentMessage;
-        });
-      }
+      setState(() {
+        final index = messages.indexOf(tempMsg);
+        if (index != -1) messages[index] = sentMsg;
+        previewVideoController?.dispose();
+        previewVideoController = null;
+        selectedMedia = null;
+        selectedMediaType = null;
+        isSending = false;
+      });
+
+      Future.delayed(const Duration(milliseconds: 100), () {
+        scrollController.animateTo(
+          scrollController.position.maxScrollExtent,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeOut,
+        );
+      });
     } catch (e) {
-      debugPrint("Erreur send message: $e");
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text("Impossible d'envoyer le message"),
-            backgroundColor: const Color(0xFFEF4444),
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
+      debugPrint("Erreur envoi message: $e");
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Row(
+            children: [
+              Icon(Icons.error_outline, color: Colors.white),
+              SizedBox(width: 12),
+              Text("Échec de l'envoi du message"),
+            ],
+          ),
+          backgroundColor: Colors.redAccent,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        ),
+      );
+      setState(() => isSending = false);
+    }
+  }
+
+  void _showMediaFullScreen(AppMessage msg) {
+    Navigator.of(context).push(
+      PageRouteBuilder(
+        opaque: false,
+        pageBuilder: (context, animation, secondaryAnimation) {
+          return FadeTransition(
+            opacity: animation,
+            child: _MediaFullScreenView(
+              message: msg,
+              videoControllers: videoControllers,
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildMessageItem(AppMessage msg) {
+    final isMe = msg.senderId == widget.currentUserId;
+
+    Widget? mediaWidget;
+
+    if (msg.media != null) {
+      if (msg.mediaType == "video") {
+        if (!videoControllers.containsKey(msg.id)) {
+          final controller = msg.media!.startsWith('http')
+              ? VideoPlayerController.network(msg.media!)
+              : VideoPlayerController.file(File(msg.media!));
+          controller.initialize().then((_) => setState(() {}));
+          videoControllers[msg.id] = controller;
+        }
+        final controller = videoControllers[msg.id]!;
+
+        mediaWidget = GestureDetector(
+          onTap: () => _showMediaFullScreen(msg),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(16),
+            child: Container(
+              width: 240,
+              height: 180,
+              color: Colors.black,
+              child: controller.value.isInitialized
+                  ? Stack(
+                alignment: Alignment.center,
+                children: [
+                  AspectRatio(
+                    aspectRatio: controller.value.aspectRatio,
+                    child: VideoPlayer(controller),
+                  ),
+                  Container(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [
+                          Colors.black.withOpacity(0.3),
+                          Colors.transparent,
+                          Colors.black.withOpacity(0.3),
+                        ],
+                      ),
+                    ),
+                  ),
+                  Icon(
+                    controller.value.isPlaying
+                        ? Icons.pause_circle_filled
+                        : Icons.play_circle_filled,
+                    size: 56,
+                    color: Colors.white.withOpacity(0.9),
+                  ),
+                ],
+              )
+                  : const Center(
+                child: CircularProgressIndicator(
+                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                ),
+              ),
+            ),
+          ),
+        );
+      } else {
+        mediaWidget = GestureDetector(
+          onTap: () => _showMediaFullScreen(msg),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(16),
+            child: Hero(
+              tag: 'media_${msg.id}',
+              child: msg.media!.startsWith('http')
+                  ? Image.network(
+                msg.media!,
+                width: 240,
+                height: 180,
+                fit: BoxFit.cover,
+              )
+                  : Image.file(
+                File(msg.media!),
+                width: 240,
+                height: 180,
+                fit: BoxFit.cover,
+              ),
             ),
           ),
         );
       }
-    } finally {
-      setState(() => isSending = false);
     }
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 16),
+      child: Row(
+        mainAxisAlignment: isMe ? MainAxisAlignment.end : MainAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          if (!isMe) ...[
+            CircleAvatar(
+              radius: 16,
+              backgroundImage: widget.selectedUser.photo != null &&
+                  widget.selectedUser.photo!.isNotEmpty
+                  ? NetworkImage(widget.selectedUser.photo!)
+                  : const AssetImage('assets/images/avatar.png') as ImageProvider,
+            ),
+            const SizedBox(width: 8),
+          ],
+          Flexible(
+            child: Column(
+              crossAxisAlignment: isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  decoration: BoxDecoration(
+                    gradient: isMe
+                        ? const LinearGradient(
+                      colors: [Color(0xFF3B82F6), Color(0xFF2563EB)],
+                    )
+                        : null,
+                    color: isMe ? null : Colors.white,
+                    borderRadius: BorderRadius.only(
+                      topLeft: const Radius.circular(20),
+                      topRight: const Radius.circular(20),
+                      bottomLeft: Radius.circular(isMe ? 20 : 4),
+                      bottomRight: Radius.circular(isMe ? 4 : 20),
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.05),
+                        blurRadius: 10,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (msg.contenu.isNotEmpty)
+                        Text(
+                          msg.contenu,
+                          style: TextStyle(
+                            color: isMe ? Colors.white : Colors.black87,
+                            fontSize: 15,
+                            height: 1.4,
+                          ),
+                        ),
+                      if (msg.media != null && msg.contenu.isNotEmpty)
+                        const SizedBox(height: 8),
+                      if (msg.media != null) mediaWidget!,
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      _formatTime(msg.createdAt),
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: Colors.grey.shade600,
+                      ),
+                    ),
+                    if (isMe) ...[
+                      const SizedBox(width: 4),
+                      Icon(
+                        msg.isRead ? Icons.done_all_rounded : Icons.done_rounded,
+                        size: 14,
+                        color: msg.isRead ? const Color(0xFF3B82F6) : Colors.grey.shade400,
+                      ),
+                    ],
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _formatTime(DateTime dateTime) {
+    final hour = dateTime.hour.toString().padLeft(2, '0');
+    final minute = dateTime.minute.toString().padLeft(2, '0');
+    return '$hour:$minute';
+  }
+
+  Widget _buildPreviewMedia() {
+    if (selectedMedia == null) return const SizedBox.shrink();
+
+    if (selectedMediaType == "video" && previewVideoController != null) {
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          width: 200,
+          height: 150,
+          color: Colors.black,
+          child: previewVideoController!.value.isInitialized
+              ? Stack(
+            alignment: Alignment.center,
+            children: [
+              AspectRatio(
+                aspectRatio: previewVideoController!.value.aspectRatio,
+                child: VideoPlayer(previewVideoController!),
+              ),
+              Icon(
+                previewVideoController!.value.isPlaying
+                    ? Icons.pause_circle_filled
+                    : Icons.play_circle_filled,
+                size: 48,
+                color: Colors.white.withOpacity(0.9),
+              ),
+            ],
+          )
+              : const Center(
+            child: CircularProgressIndicator(
+              valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+            ),
+          ),
+        ),
+      );
+    } else {
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: Image.file(
+          selectedMedia!,
+          width: 200,
+          height: 150,
+          fit: BoxFit.cover,
+        ),
+      );
+    }
+  }
+
+  Widget _buildMessageInput() {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, -2),
+          ),
+        ],
+      ),
+      child: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          child: Column(
+            children: [
+              if (selectedMedia != null)
+                Container(
+                  margin: const EdgeInsets.only(bottom: 12),
+                  child: Stack(
+                    children: [
+                      _buildPreviewMedia(),
+                      Positioned(
+                        top: 8,
+                        right: 8,
+                        child: GestureDetector(
+                          onTap: () {
+                            setState(() {
+                              selectedMedia = null;
+                              selectedMediaType = null;
+                              previewVideoController?.dispose();
+                              previewVideoController = null;
+                            });
+                          },
+                          child: Container(
+                            padding: const EdgeInsets.all(4),
+                            decoration: BoxDecoration(
+                              color: Colors.black.withOpacity(0.6),
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(
+                              Icons.close,
+                              size: 20,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              Row(
+                children: [
+                  Container(
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF3B82F6).withOpacity(0.1),
+                      shape: BoxShape.circle,
+                    ),
+                    child: IconButton(
+                      icon: const Icon(Icons.add_rounded, color: Color(0xFF3B82F6)),
+                      onPressed: pickMedia,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade100,
+                        borderRadius: BorderRadius.circular(24),
+                      ),
+                      child: TextField(
+                        controller: messageController,
+                        decoration: const InputDecoration(
+                          hintText: "Message...",
+                          hintStyle: TextStyle(color: Colors.grey),
+                          border: InputBorder.none,
+                          contentPadding: EdgeInsets.symmetric(
+                            horizontal: 20,
+                            vertical: 12,
+                          ),
+                        ),
+                        maxLines: null,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Container(
+                    decoration: const BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [Color(0xFF3B82F6), Color(0xFF2563EB)],
+                      ),
+                      shape: BoxShape.circle,
+                    ),
+                    child: IconButton(
+                      icon: isSending
+                          ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                        ),
+                      )
+                          : const Icon(Icons.send_rounded, color: Colors.white),
+                      onPressed: isSending ? null : sendMessage,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFC),
+      backgroundColor: const Color(0xFFF5F7FA),
       appBar: AppBar(
-        backgroundColor: const Color(0xFF2563EB),
         elevation: 0,
+        backgroundColor: Colors.white,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_rounded, color: Colors.white),
+          icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.black87),
           onPressed: () => Navigator.pop(context),
         ),
         title: Row(
           children: [
             CircleAvatar(
-              radius: 18,
-              backgroundColor: Colors.white.withOpacity(0.2),
-              child: Text(
-                widget.selectedUser.name[0].toUpperCase(),
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 16,
-                ),
-              ),
+              radius: 20,
+              backgroundImage: widget.selectedUser.photo != null &&
+                  widget.selectedUser.photo!.isNotEmpty
+                  ? NetworkImage(widget.selectedUser.photo!)
+                  : const AssetImage('assets/images/avatar.png') as ImageProvider,
             ),
             const SizedBox(width: 12),
             Expanded(
@@ -176,15 +619,15 @@ class _ChatScreenState extends State<ChatScreen> {
                   Text(
                     widget.selectedUser.name,
                     style: const TextStyle(
-                      color: Colors.white,
+                      color: Colors.black87,
                       fontSize: 16,
                       fontWeight: FontWeight.w600,
                     ),
                   ),
                   Text(
-                    widget.selectedUser.role,
+                    'En ligne',
                     style: TextStyle(
-                      color: Colors.white.withOpacity(0.8),
+                      color: Colors.grey.shade600,
                       fontSize: 12,
                     ),
                   ),
@@ -200,69 +643,16 @@ class _ChatScreenState extends State<ChatScreen> {
             child: isLoading
                 ? const Center(
               child: CircularProgressIndicator(
-                color: Color(0xFF2563EB),
-                strokeWidth: 3,
-              ),
-            )
-                : messages.isEmpty
-                ? Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(24),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFEFF6FF),
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(
-                      Icons.chat_bubble_outline_rounded,
-                      size: 60,
-                      color: Color(0xFF2563EB),
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-                  const Text(
-                    'Aucun message',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w600,
-                      color: Color(0xFF64748B),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  const Text(
-                    'Envoyez le premier message',
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: Color(0xFF94A3B8),
-                    ),
-                  ),
-                ],
+                valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF3B82F6)),
               ),
             )
                 : ListView.builder(
-              controller: _scrollController,
-              padding: const EdgeInsets.symmetric(
-                horizontal: 16,
-                vertical: 20,
-              ),
+              controller: scrollController,
+              padding: const EdgeInsets.symmetric(vertical: 16),
               itemCount: messages.length,
               itemBuilder: (context, index) {
                 final msg = messages[index];
-                final isMe = msg.senderId == widget.currentUserId;
-                final showDate = index == 0 ||
-                    !_isSameDay(
-                      messages[index - 1].createdAt,
-                      msg.createdAt,
-                    );
-
-                return Column(
-                  children: [
-                    if (showDate) _buildDateSeparator(msg.createdAt),
-                    _buildMessageBubble(msg, isMe),
-                  ],
-                );
+                return _buildMessageItem(msg);
               },
             ),
           ),
@@ -271,206 +661,123 @@ class _ChatScreenState extends State<ChatScreen> {
       ),
     );
   }
+}
 
-  Widget _buildDateSeparator(DateTime date) {
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    final messageDate = DateTime(date.year, date.month, date.day);
-    final difference = today.difference(messageDate).inDays;
+class _MediaFullScreenView extends StatefulWidget {
+  final AppMessage message;
+  final Map<int, VideoPlayerController> videoControllers;
 
-    String label;
-    if (difference == 0) {
-      label = "Aujourd'hui";
-    } else if (difference == 1) {
-      label = "Hier";
-    } else {
-      label = "${date.day}/${date.month}/${date.year}";
+  const _MediaFullScreenView({
+    required this.message,
+    required this.videoControllers,
+  });
+
+  @override
+  State<_MediaFullScreenView> createState() => _MediaFullScreenViewState();
+}
+
+class _MediaFullScreenViewState extends State<_MediaFullScreenView> {
+  VideoPlayerController? _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.message.mediaType == "video") {
+      _controller = widget.videoControllers[widget.message.id];
     }
-
-    return Container(
-      margin: const EdgeInsets.symmetric(vertical: 16),
-      child: Row(
-        children: [
-          const Expanded(child: Divider(color: Color(0xFFE2E8F0))),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Text(
-              label,
-              style: const TextStyle(
-                fontSize: 12,
-                color: Color(0xFF94A3B8),
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          ),
-          const Expanded(child: Divider(color: Color(0xFFE2E8F0))),
-        ],
-      ),
-    );
   }
 
-  Widget _buildMessageBubble(AppMessage msg, bool isMe) {
-    return Align(
-      alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 8),
-        constraints: BoxConstraints(
-          maxWidth: MediaQuery.of(context).size.width * 0.75,
-        ),
-        child: Column(
-          crossAxisAlignment:
-          isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
-          children: [
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              decoration: BoxDecoration(
-                color: isMe ? const Color(0xFF2563EB) : Colors.white,
-                borderRadius: BorderRadius.only(
-                  topLeft: const Radius.circular(16),
-                  topRight: const Radius.circular(16),
-                  bottomLeft: Radius.circular(isMe ? 16 : 4),
-                  bottomRight: Radius.circular(isMe ? 4 : 16),
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.04),
-                    blurRadius: 8,
-                    offset: const Offset(0, 2),
-                  ),
-                ],
-              ),
-              child: Text(
-                msg.contenu,
-                style: TextStyle(
-                  fontSize: 15,
-                  color: isMe ? Colors.white : const Color(0xFF0F172A),
-                  height: 1.4,
-                ),
-              ),
-            ),
-            const SizedBox(height: 4),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 4),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    _formatMessageTime(msg.createdAt),
-                    style: const TextStyle(
-                      fontSize: 11,
-                      color: Color(0xFF94A3B8),
-                    ),
-                  ),
-                  if (isMe) ...[
-                    const SizedBox(width: 4),
-                    Icon(
-                      msg.isRead
-                          ? Icons.done_all_rounded
-                          : Icons.done_rounded,
-                      size: 14,
-                      color: msg.isRead
-                          ? const Color(0xFF2563EB)
-                          : const Color(0xFF94A3B8),
-                    ),
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      body: Stack(
+        children: [
+          Center(
+            child: widget.message.mediaType == "video" && _controller != null
+                ? _controller!.value.isInitialized
+                ? GestureDetector(
+              onTap: () {
+                setState(() {
+                  if (_controller!.value.isPlaying) {
+                    _controller!.pause();
+                  } else {
+                    _controller!.play();
+                  }
+                });
+              },
+              child: AspectRatio(
+                aspectRatio: _controller!.value.aspectRatio,
+                child: Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    VideoPlayer(_controller!),
+                    if (!_controller!.value.isPlaying)
+                      Icon(
+                        Icons.play_circle_filled,
+                        size: 80,
+                        color: Colors.white.withOpacity(0.9),
+                      ),
                   ],
+                ),
+              ),
+            )
+                : const CircularProgressIndicator(
+              valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+            )
+                : InteractiveViewer(
+              minScale: 0.5,
+              maxScale: 4.0,
+              child: Hero(
+                tag: 'media_${widget.message.id}',
+                child: widget.message.media!.startsWith('http')
+                    ? Image.network(widget.message.media!)
+                    : Image.file(File(widget.message.media!)),
+              ),
+            ),
+          ),
+          SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Container(
+                    decoration: BoxDecoration(
+                      color: Colors.black.withOpacity(0.5),
+                      shape: BoxShape.circle,
+                    ),
+                    child: IconButton(
+                      icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white),
+                      onPressed: () => Navigator.pop(context),
+                    ),
+                  ),
+                  if (widget.message.contenu.isNotEmpty)
+                    Expanded(
+                      child: Container(
+                        margin: const EdgeInsets.only(left: 16),
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withOpacity(0.5),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Text(
+                          widget.message.contenu,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 14,
+                          ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ),
                 ],
               ),
             ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildMessageInput() {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 10,
-            offset: const Offset(0, -2),
-          ),
-        ],
-      ),
-      padding: const EdgeInsets.all(16),
-      child: Row(
-        children: [
-          Expanded(
-            child: Container(
-              decoration: BoxDecoration(
-                color: const Color(0xFFF8FAFC),
-                borderRadius: BorderRadius.circular(24),
-                border: Border.all(color: const Color(0xFFE2E8F0)),
-              ),
-              child: TextField(
-                controller: messageController,
-                maxLines: null,
-                textCapitalization: TextCapitalization.sentences,
-                decoration: const InputDecoration(
-                  hintText: "Écrire un message...",
-                  hintStyle: TextStyle(color: Color(0xFF94A3B8)),
-                  border: InputBorder.none,
-                  contentPadding: EdgeInsets.symmetric(
-                    horizontal: 20,
-                    vertical: 12,
-                  ),
-                ),
-                onSubmitted: (_) => sendMessage(),
-              ),
-            ),
-          ),
-          const SizedBox(width: 12),
-          Container(
-            decoration: BoxDecoration(
-              color: const Color(0xFF2563EB),
-              borderRadius: BorderRadius.circular(24),
-              boxShadow: [
-                BoxShadow(
-                  color: const Color(0xFF2563EB).withOpacity(0.3),
-                  blurRadius: 8,
-                  offset: const Offset(0, 2),
-                ),
-              ],
-            ),
-            child: Material(
-              color: Colors.transparent,
-              child: InkWell(
-                onTap: isSending ? null : sendMessage,
-                borderRadius: BorderRadius.circular(24),
-                child: Container(
-                  padding: const EdgeInsets.all(12),
-                  child: isSending
-                      ? const SizedBox(
-                    width: 24,
-                    height: 24,
-                    child: CircularProgressIndicator(
-                      color: Colors.white,
-                      strokeWidth: 2,
-                    ),
-                  )
-                      : const Icon(
-                    Icons.send_rounded,
-                    color: Colors.white,
-                    size: 24,
-                  ),
-                ),
-              ),
-            ),
           ),
         ],
       ),
     );
-  }
-
-  bool _isSameDay(DateTime date1, DateTime date2) {
-    return date1.year == date2.year &&
-        date1.month == date2.month &&
-        date1.day == date2.day;
-  }
-
-  String _formatMessageTime(DateTime dateTime) {
-    return '${dateTime.hour.toString().padLeft(2, '0')}:${dateTime.minute.toString().padLeft(2, '0')}';
   }
 }

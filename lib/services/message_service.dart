@@ -1,11 +1,10 @@
 import 'dart:convert';
+import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/ user.dart';
 import '../models/message_model.dart';
 import 'api_service.dart';
-import 'package:flutter/material.dart';
-
 
 class MessageService {
   // ✅ Récupérer tous les utilisateurs
@@ -24,12 +23,8 @@ class MessageService {
     }
   }
 
-  // ✅ Récupérer tous les messages entre l'utilisateur connecté et un destinataire
+  // ✅ Récupérer tous les messages avec un utilisateur
   static Future<List<AppMessage>> getMessages(String token, int otherUserId) async {
-    final prefs = await SharedPreferences.getInstance();
-    final currentUserId = prefs.getInt('user_id');
-    if (currentUserId == null) throw Exception("Aucun utilisateur connecté trouvé");
-
     final url = Uri.parse('${ApiService.baseUrl}/messages/with/$otherUserId');
     final response = await http.get(url, headers: {
       'Authorization': 'Bearer $token',
@@ -44,56 +39,54 @@ class MessageService {
     }
   }
 
+  // ✅ Envoyer un message texte ou média
+  static Future<AppMessage> sendMessageWithMedia(
+      String token, int receiverId, String contenu, File? media) async {
 
-  // ✅ Envoyer un message
-  static Future<AppMessage> sendMessage(String token, int receiverId, String contenu) async {
     final prefs = await SharedPreferences.getInstance();
-    final senderId = prefs.getInt('user_id'); // ID utilisateur connecté
+    final senderId = prefs.getInt('user_id');
     if (senderId == null) throw Exception("Aucun utilisateur connecté trouvé");
 
     final url = Uri.parse('${ApiService.baseUrl}/messages');
 
-    final response = await http.post(
-      url,
-      headers: {
-        "Authorization": "Bearer $token",
-        "Content-Type": "application/json",
-        "Accept": "application/json",
-      },
-      body: jsonEncode({
-        "sender_id": senderId,
-        "receiver_id": receiverId,
-        "contenu": contenu,
-      }),
-    );
+    var request = http.MultipartRequest('POST', url)
+      ..headers['Authorization'] = 'Bearer $token'
+      ..headers['Accept'] = 'application/json'
+      ..fields['sender_id'] = senderId.toString()
+      ..fields['receiver_id'] = receiverId.toString()
+      ..fields['contenu'] = contenu.isNotEmpty ? contenu : '';
 
-    debugPrint("sendMessage response: ${response.statusCode} -> ${response.body}");
+    // 🔹 Ajouter le fichier média si présent
+    if (media != null) {
+      final fileName = media.path.split('/').last;
+      request.files.add(await http.MultipartFile.fromPath(
+        'media',
+        media.path,
+        filename: fileName,
+      ));
+      // Optionnel: définir le type si le backend le nécessite
+      // request.fields['media_type'] = fileName.endsWith('.mp4') ? 'video' : 'image';
+    }
+
+    final streamedResponse = await request.send();
+    final response = await http.Response.fromStream(streamedResponse);
 
     if (response.statusCode == 200 || response.statusCode == 201) {
       final data = jsonDecode(response.body);
-
-      // Vérification que tous les champs nécessaires existent
-      if (data['id'] == null || data['sender_id'] == null || data['receiver_id'] == null || data['contenu'] == null || data['created_at'] == null) {
-        throw Exception("Réponse du serveur invalide: $data");
-      }
-
       return AppMessage.fromJson(data);
     } else {
-      throw Exception("Erreur send message: ${response.body}");
+      throw Exception('Erreur send message with media: ${response.body}');
     }
   }
 
+  // ✅ Envoyer uniquement un message texte
+  static Future<AppMessage> sendMessage(String token, int receiverId, String contenu) async {
+    return sendMessageWithMedia(token, receiverId, contenu, null);
+  }
 
+  // ✅ Récupérer les messages reçus
   static Future<List<AppMessage>> getReceivedMessages(String token) async {
-    final prefs = await SharedPreferences.getInstance();
-    final userId = prefs.getInt('user_id');
-    if (userId == null) throw Exception("Aucun utilisateur connecté trouvé");
-
-    //final url = Uri.parse('${ApiService.baseUrl}/messages/received');
-    //final url = Uri.parse('${ApiService.baseUrl}/messages/received?receiver_id=$userId');
     final url = Uri.parse('${ApiService.baseUrl}/messages/received');
-
-
     final response = await http.get(url, headers: {
       'Authorization': 'Bearer $token',
       'Accept': 'application/json',
@@ -107,63 +100,32 @@ class MessageService {
     }
   }
 
+  // ✅ Marquer les messages comme lus
   static Future<void> markMessagesAsRead(String token, int senderId) async {
     final url = Uri.parse('${ApiService.baseUrl}/messages/read/$senderId');
     final response = await http.post(url, headers: {
       'Authorization': 'Bearer $token',
       'Accept': 'application/json',
     });
+
     if (response.statusCode != 200) {
       throw Exception('Erreur mark messages as read: ${response.body}');
     }
   }
 
-  static Future<List<AppMessage>> getMessagesWithUser(
-      String token, int userId) async {
-
-    final url = Uri.parse('${ApiService.baseUrl}/messages/received?sender_id=$userId');
-    final response = await http.get(
-      url,
-      headers: {
-        'Authorization': 'Bearer $token',
-        'Accept': 'application/json',
-      },
-    );
-
-    if (response.statusCode == 200) {
-      final List data = jsonDecode(response.body);
-      return data.map((json) => AppMessage.fromJson(json)).toList();
-    } else {
-      throw Exception('Erreur get messages: ${response.body}');
-    }
-  }
-
-  // ✅ Récupérer la boîte de réception (expéditeurs + nombre de messages non lus)
+  // ✅ Récupérer la boîte de réception
   static Future<List<Map<String, dynamic>>> getInbox(String token) async {
-    final prefs = await SharedPreferences.getInstance();
-    final userId = prefs.getInt('user_id');
-    if (userId == null) throw Exception("Aucun utilisateur connecté trouvé");
-
     final url = Uri.parse('${ApiService.baseUrl}/messages/inbox');
-
-    final response = await http.get(
-      url,
-      headers: {
-        'Authorization': 'Bearer $token',
-        'Accept': 'application/json',
-      },
-    );
+    final response = await http.get(url, headers: {
+      'Authorization': 'Bearer $token',
+      'Accept': 'application/json',
+    });
 
     if (response.statusCode == 200) {
       final List data = jsonDecode(response.body);
-      // On retourne une liste de maps contenant : sender_id, sender_name, unread_count, etc.
       return data.cast<Map<String, dynamic>>();
     } else {
       throw Exception('Erreur get inbox: ${response.body}');
     }
   }
-
-
-
-
 }

@@ -17,7 +17,6 @@ class _MessagingScreenState extends State<MessagingScreen> {
   int currentUserId = 0;
   List<AppMessage> messages = [];
   List<User> senders = [];
-  Map<int, int> unreadCounts = {};
   bool isLoading = true;
 
   @override
@@ -26,7 +25,7 @@ class _MessagingScreenState extends State<MessagingScreen> {
     loadToken();
   }
 
-  void loadToken() async {
+  Future<void> loadToken() async {
     SharedPreferences prefs = await SharedPreferences.getInstance();
     setState(() {
       token = prefs.getString('token') ?? '';
@@ -35,7 +34,7 @@ class _MessagingScreenState extends State<MessagingScreen> {
     fetchReceivedMessages();
   }
 
-  void fetchReceivedMessages() async {
+  Future<void> fetchReceivedMessages() async {
     setState(() => isLoading = true);
     try {
       final data = await MessageService.getReceivedMessages(token);
@@ -43,12 +42,16 @@ class _MessagingScreenState extends State<MessagingScreen> {
 
       final uniqueSenders = <int, User>{};
       for (var msg in data) {
-        uniqueSenders[msg.senderId] = User(
-          id: msg.senderId,
-          name: msg.senderName,
-          role: 'alumni',
-          email: msg.senderEmail,
-        );
+        // Vérifier si l'utilisateur existe déjà, sinon créer un nouvel objet User
+        if (!uniqueSenders.containsKey(msg.senderId)) {
+          uniqueSenders[msg.senderId] = User(
+            id: msg.senderId,
+            name: msg.senderName,
+            role: 'alumni',
+            email: msg.senderEmail ?? '',
+            photo: msg.senderPhoto, // Photo du message
+          );
+        }
       }
       setState(() => senders = uniqueSenders.values.toList());
     } catch (e) {
@@ -58,14 +61,8 @@ class _MessagingScreenState extends State<MessagingScreen> {
     }
   }
 
-  void openChat(User user) {
-    if (!senders.any((s) => s.id == user.id)) {
-      setState(() {
-        senders.add(user);
-      });
-    }
-
-    Navigator.push(
+  void openChat(User user) async {
+    await Navigator.push(
       context,
       MaterialPageRoute(
         builder: (context) => ChatScreen(
@@ -75,46 +72,40 @@ class _MessagingScreenState extends State<MessagingScreen> {
         ),
       ),
     );
+    // Rafraîchir les messages après le retour du chat
+    fetchReceivedMessages();
   }
 
-  void newConversation() async {
+  Future<void> newConversation() async {
     try {
       final users = await MessageService.getUsers(token);
 
       User? selected = await showDialog<User>(
         context: context,
         builder: (context) => Dialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          backgroundColor: Colors.transparent,
           child: Container(
-            constraints: const BoxConstraints(maxHeight: 500),
+            constraints: const BoxConstraints(maxHeight: 600),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(24),
+            ),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
                 Container(
                   padding: const EdgeInsets.all(24),
                   decoration: const BoxDecoration(
-                    color: Color(0xFF2563EB),
-                    borderRadius: BorderRadius.only(
-                      topLeft: Radius.circular(20),
-                      topRight: Radius.circular(20),
+                    gradient: LinearGradient(
+                      colors: [Color(0xFF3B82F6), Color(0xFF2563EB)],
                     ),
+                    borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
                   ),
                   child: Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(10),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.2),
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: const Icon(
-                          Icons.person_add_rounded,
-                          color: Colors.white,
-                          size: 24,
-                        ),
-                      ),
-                      const SizedBox(width: 16),
-                      const Expanded(
+                    children: const [
+                      Icon(Icons.person_add_rounded, color: Colors.white, size: 28),
+                      SizedBox(width: 16),
+                      Expanded(
                         child: Text(
                           "Nouvelle conversation",
                           style: TextStyle(
@@ -124,81 +115,86 @@ class _MessagingScreenState extends State<MessagingScreen> {
                           ),
                         ),
                       ),
-                      IconButton(
-                        icon: const Icon(Icons.close_rounded, color: Colors.white),
-                        onPressed: () => Navigator.pop(context),
-                      ),
+                      Icon(Icons.close, color: Colors.white70),
                     ],
                   ),
                 ),
                 Flexible(
                   child: ListView.builder(
                     shrinkWrap: true,
+                    padding: const EdgeInsets.symmetric(vertical: 8),
                     itemCount: users.length,
                     itemBuilder: (context, index) {
                       final user = users[index];
-                      return Material(
-                        color: Colors.transparent,
-                        child: InkWell(
-                          onTap: () => Navigator.pop(context, user),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 20,
-                              vertical: 16,
-                            ),
-                            decoration: BoxDecoration(
-                              border: Border(
-                                bottom: BorderSide(
-                                  color: const Color(0xFFE2E8F0),
-                                  width: index == users.length - 1 ? 0 : 1,
-                                ),
-                              ),
-                            ),
-                            child: Row(
-                              children: [
-                                CircleAvatar(
-                                  radius: 24,
-                                  backgroundColor: const Color(0xFFEFF6FF),
-                                  child: Text(
-                                    user.name[0].toUpperCase(),
-                                    style: const TextStyle(
-                                      color: Color(0xFF2563EB),
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 18,
+                      return InkWell(
+                        onTap: () => Navigator.pop(context, user),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                          child: Row(
+                            children: [
+                              Stack(
+                                children: [
+                                  CircleAvatar(
+                                    radius: 28,
+                                    backgroundColor: Colors.grey.shade200,
+                                    backgroundImage: user.photo != null && user.photo!.isNotEmpty
+                                        ? NetworkImage(user.photo!)
+                                        : null,
+                                    child: user.photo == null || user.photo!.isEmpty
+                                        ? Text(
+                                      user.name.isNotEmpty ? user.name[0].toUpperCase() : '?',
+                                      style: const TextStyle(
+                                        fontSize: 20,
+                                        fontWeight: FontWeight.bold,
+                                        color: Color(0xFF3B82F6),
+                                      ),
+                                    )
+                                        : null,
+                                  ),
+                                  Positioned(
+                                    right: 0,
+                                    bottom: 0,
+                                    child: Container(
+                                      width: 14,
+                                      height: 14,
+                                      decoration: BoxDecoration(
+                                        color: Colors.green,
+                                        shape: BoxShape.circle,
+                                        border: Border.all(color: Colors.white, width: 2),
+                                      ),
                                     ),
                                   ),
-                                ),
-                                const SizedBox(width: 16),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        user.name,
-                                        style: const TextStyle(
-                                          fontSize: 16,
-                                          fontWeight: FontWeight.w600,
-                                          color: Color(0xFF0F172A),
-                                        ),
+                                ],
+                              ),
+                              const SizedBox(width: 16),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      user.name,
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.w600,
+                                        fontSize: 16,
                                       ),
-                                      const SizedBox(height: 2),
-                                      Text(
-                                        user.role,
-                                        style: const TextStyle(
-                                          fontSize: 13,
-                                          color: Color(0xFF64748B),
-                                        ),
+                                    ),
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      user.role,
+                                      style: TextStyle(
+                                        color: Colors.grey.shade600,
+                                        fontSize: 13,
                                       ),
-                                    ],
-                                  ),
+                                    ),
+                                  ],
                                 ),
-                                const Icon(
-                                  Icons.arrow_forward_ios_rounded,
-                                  size: 16,
-                                  color: Color(0xFF94A3B8),
-                                ),
-                              ],
-                            ),
+                              ),
+                              Icon(
+                                Icons.arrow_forward_ios_rounded,
+                                size: 16,
+                                color: Colors.grey.shade400,
+                              ),
+                            ],
                           ),
                         ),
                       );
@@ -214,144 +210,176 @@ class _MessagingScreenState extends State<MessagingScreen> {
       if (selected != null) openChat(selected);
     } catch (e) {
       debugPrint("Erreur nouvelle conversation: $e");
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text("Impossible de charger les utilisateurs"),
-            backgroundColor: const Color(0xFFEF4444),
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: const [
+              Icon(Icons.error_outline, color: Colors.white),
+              SizedBox(width: 12),
+              Text("Impossible de charger les utilisateurs"),
+            ],
           ),
-        );
-      }
+          backgroundColor: Colors.redAccent,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        ),
+      );
+    }
+  }
+
+  String _formatTime(DateTime dateTime) {
+    final now = DateTime.now();
+    final difference = now.difference(dateTime);
+
+    if (difference.inDays == 0) {
+      final hour = dateTime.hour.toString().padLeft(2, '0');
+      final minute = dateTime.minute.toString().padLeft(2, '0');
+      return '$hour:$minute';
+    } else if (difference.inDays == 1) {
+      return 'Hier';
+    } else if (difference.inDays < 7) {
+      const days = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];
+      return days[dateTime.weekday - 1];
+    } else {
+      final day = dateTime.day.toString().padLeft(2, '0');
+      final month = dateTime.month.toString().padLeft(2, '0');
+      return '$day/$month';
     }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFC),
-      body: CustomScrollView(
-        slivers: [
-          SliverAppBar(
-            expandedHeight: 140,
-            floating: false,
-            pinned: true,
-            elevation: 0,
-            backgroundColor: const Color(0xFF2563EB),
-            flexibleSpace: FlexibleSpaceBar(
-              title: const Text(
-                'Messages',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 20,
-                ),
-              ),
-              centerTitle: true,
-              background: Container(color: const Color(0xFF2563EB)),
-            ),
-            actions: [
-              Container(
-                margin: const EdgeInsets.only(right: 12),
-                child: IconButton(
-                  icon: Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.2),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: const Icon(Icons.add_rounded, color: Colors.white),
-                  ),
-                  onPressed: newConversation,
-                  tooltip: "Nouvelle conversation",
-                ),
-              ),
-            ],
+      backgroundColor: const Color(0xFFF5F7FA),
+      appBar: AppBar(
+        elevation: 0,
+        backgroundColor: Colors.white,
+        title: const Text(
+          "Messages",
+          style: TextStyle(
+            color: Colors.black87,
+            fontWeight: FontWeight.bold,
+            fontSize: 22,
           ),
-          isLoading
-              ? const SliverFillRemaining(
-            child: Center(
-              child: CircularProgressIndicator(
-                color: Color(0xFF2563EB),
-                strokeWidth: 3,
+        ),
+        centerTitle: false,
+        actions: [
+          Container(
+            margin: const EdgeInsets.only(right: 8),
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: [Color(0xFF3B82F6), Color(0xFF2563EB)],
               ),
+              borderRadius: BorderRadius.circular(12),
             ),
-          )
-              : senders.isEmpty
-              ? SliverFillRemaining(
-            child: Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(32),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFEFF6FF),
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(
-                      Icons.chat_bubble_outline_rounded,
-                      size: 80,
-                      color: Color(0xFF2563EB),
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-                  const Text(
-                    'Aucune conversation',
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                      color: Color(0xFF0F172A),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  const Text(
-                    'Commencez une nouvelle conversation',
-                    style: TextStyle(
-                      fontSize: 15,
-                      color: Color(0xFF64748B),
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-                  ElevatedButton.icon(
-                    onPressed: newConversation,
-                    icon: const Icon(Icons.add_rounded),
-                    label: const Text('Nouvelle conversation'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF2563EB),
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 24,
-                        vertical: 14,
-                      ),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      elevation: 0,
-                    ),
-                  ),
-                ],
-              ),
+            child: IconButton(
+              icon: const Icon(Icons.edit_rounded, color: Colors.white),
+              onPressed: newConversation,
             ),
-          )
-              : SliverPadding(
-            padding: const EdgeInsets.fromLTRB(16, 20, 16, 20),
-            sliver: SliverList(
-              delegate: SliverChildBuilderDelegate(
-                    (context, index) {
-                  final sender = senders[index];
-                  final unreadCount = messages
-                      .where((m) =>
-                  m.senderId == sender.id && !m.isRead)
-                      .length;
+          ),
+        ],
+      ),
+      body: isLoading
+          ? const Center(
+        child: CircularProgressIndicator(
+          valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF3B82F6)),
+        ),
+      )
+          : senders.isEmpty
+          ? _buildEmptyState()
+          : RefreshIndicator(
+        color: const Color(0xFF3B82F6),
+        onRefresh: fetchReceivedMessages,
+        child: ListView.builder(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          itemCount: senders.length,
+          itemBuilder: (context, index) {
+            final sender = senders[index];
+            final unreadCount = messages
+                .where((m) => m.senderId == sender.id && !m.isRead)
+                .length;
+            final lastMessage = messages
+                .where((m) => m.senderId == sender.id)
+                .isNotEmpty
+                ? messages
+                .where((m) => m.senderId == sender.id)
+                .reduce((a, b) =>
+            a.createdAt.isAfter(b.createdAt) ? a : b)
+                : null;
+            return _buildConversationCard(sender, unreadCount, lastMessage);
+          },
+        ),
+      ),
+    );
+  }
 
-                  return _buildConversationCard(
-                    sender,
-                    unreadCount,
-                  );
-                },
-                childCount: senders.length,
+  Widget _buildEmptyState() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(32),
+            decoration: BoxDecoration(
+              color: const Color(0xFF3B82F6).withOpacity(0.1),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(
+              Icons.chat_bubble_outline_rounded,
+              size: 80,
+              color: Color(0xFF3B82F6),
+            ),
+          ),
+          const SizedBox(height: 24),
+          const Text(
+            "Aucune conversation",
+            style: TextStyle(
+              fontSize: 22,
+              fontWeight: FontWeight.bold,
+              color: Colors.black87,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            "Commencez une nouvelle conversation",
+            style: TextStyle(
+              fontSize: 15,
+              color: Colors.grey.shade600,
+            ),
+          ),
+          const SizedBox(height: 32),
+          Container(
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: [Color(0xFF3B82F6), Color(0xFF2563EB)],
+              ),
+              borderRadius: BorderRadius.circular(16),
+              boxShadow: [
+                BoxShadow(
+                  color: const Color(0xFF3B82F6).withOpacity(0.3),
+                  blurRadius: 12,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: ElevatedButton.icon(
+              onPressed: newConversation,
+              icon: const Icon(Icons.add_rounded, color: Colors.white),
+              label: const Text(
+                "Nouvelle conversation",
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.transparent,
+                foregroundColor: Colors.white,
+                shadowColor: Colors.transparent,
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                ),
               ),
             ),
           ),
@@ -360,15 +388,20 @@ class _MessagingScreenState extends State<MessagingScreen> {
     );
   }
 
-  Widget _buildConversationCard(User sender, int unreadCount) {
-    final lastMessage = messages
-        .where((m) => m.senderId == sender.id)
-        .isNotEmpty
-        ? messages.where((m) => m.senderId == sender.id).last
-        : null;
+  Widget _buildConversationCard(User sender, int unreadCount, AppMessage? lastMessage) {
+    String lastMessageText = 'Aucun message';
+    if (lastMessage != null) {
+      if (lastMessage.media != null && lastMessage.mediaType == "image") {
+        lastMessageText = '📷 Image';
+      } else if (lastMessage.media != null && lastMessage.mediaType == "video") {
+        lastMessageText = '🎥 Vidéo';
+      } else if (lastMessage.contenu.isNotEmpty) {
+        lastMessageText = lastMessage.contenu;
+      }
+    }
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 12),
+      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
@@ -391,41 +424,50 @@ class _MessagingScreenState extends State<MessagingScreen> {
               children: [
                 Stack(
                   children: [
-                    CircleAvatar(
-                      radius: 28,
-                      backgroundColor: const Color(0xFFEFF6FF),
-                      child: Text(
-                        sender.name[0].toUpperCase(),
-                        style: const TextStyle(
-                          color: Color(0xFF2563EB),
-                          fontWeight: FontWeight.bold,
-                          fontSize: 20,
+                    Container(
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: unreadCount > 0
+                              ? const Color(0xFF3B82F6)
+                              : Colors.transparent,
+                          width: 2,
                         ),
+                      ),
+                      child: CircleAvatar(
+                        radius: 28,
+                        backgroundColor: Colors.grey.shade200,
+                        backgroundImage: sender.photo != null && sender.photo!.isNotEmpty
+                            ? NetworkImage(sender.photo!)
+                            : null,
+                        onBackgroundImageError: sender.photo != null && sender.photo!.isNotEmpty
+                            ? (exception, stackTrace) {
+                          debugPrint("Erreur chargement image: $exception");
+                        }
+                            : null,
+                        child: sender.photo == null || sender.photo!.isEmpty
+                            ? Text(
+                          sender.name.isNotEmpty ? sender.name[0].toUpperCase() : '?',
+                          style: const TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF3B82F6),
+                          ),
+                        )
+                            : null,
                       ),
                     ),
                     if (unreadCount > 0)
                       Positioned(
                         right: 0,
-                        top: 0,
+                        bottom: 0,
                         child: Container(
-                          padding: const EdgeInsets.all(6),
-                          decoration: const BoxDecoration(
-                            color: Color(0xFFEF4444),
+                          width: 14,
+                          height: 14,
+                          decoration: BoxDecoration(
+                            color: Colors.green,
                             shape: BoxShape.circle,
-                          ),
-                          constraints: const BoxConstraints(
-                            minWidth: 20,
-                            minHeight: 20,
-                          ),
-                          child: Center(
-                            child: Text(
-                              unreadCount > 9 ? '9+' : '$unreadCount',
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 11,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
+                            border: Border.all(color: Colors.white, width: 2),
                           ),
                         ),
                       ),
@@ -437,17 +479,19 @@ class _MessagingScreenState extends State<MessagingScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           Expanded(
                             child: Text(
                               sender.name,
                               style: TextStyle(
-                                fontSize: 16,
                                 fontWeight: unreadCount > 0
                                     ? FontWeight.bold
                                     : FontWeight.w600,
-                                color: const Color(0xFF0F172A),
+                                fontSize: 16,
+                                color: Colors.black87,
                               ),
+                              overflow: TextOverflow.ellipsis,
                             ),
                           ),
                           if (lastMessage != null)
@@ -456,8 +500,8 @@ class _MessagingScreenState extends State<MessagingScreen> {
                               style: TextStyle(
                                 fontSize: 12,
                                 color: unreadCount > 0
-                                    ? const Color(0xFF2563EB)
-                                    : const Color(0xFF94A3B8),
+                                    ? const Color(0xFF3B82F6)
+                                    : Colors.grey.shade600,
                                 fontWeight: unreadCount > 0
                                     ? FontWeight.w600
                                     : FontWeight.normal,
@@ -465,33 +509,47 @@ class _MessagingScreenState extends State<MessagingScreen> {
                             ),
                         ],
                       ),
-                      const SizedBox(height: 6),
+                      const SizedBox(height: 4),
                       Row(
                         children: [
                           Expanded(
                             child: Text(
-                              lastMessage?.contenu ?? 'Aucun message',
+                              lastMessageText,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                               style: TextStyle(
-                                fontSize: 14,
                                 color: unreadCount > 0
-                                    ? const Color(0xFF475569)
-                                    : const Color(0xFF94A3B8),
+                                    ? Colors.black87
+                                    : Colors.grey.shade600,
+                                fontSize: 14,
                                 fontWeight: unreadCount > 0
                                     ? FontWeight.w500
                                     : FontWeight.normal,
                               ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
                             ),
                           ),
-                          const SizedBox(width: 8),
-                          Icon(
-                            Icons.arrow_forward_ios_rounded,
-                            size: 14,
-                            color: unreadCount > 0
-                                ? const Color(0xFF2563EB)
-                                : const Color(0xFF94A3B8),
-                          ),
+                          if (unreadCount > 0)
+                            Container(
+                              margin: const EdgeInsets.only(left: 8),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 4,
+                              ),
+                              decoration: const BoxDecoration(
+                                gradient: LinearGradient(
+                                  colors: [Color(0xFF3B82F6), Color(0xFF2563EB)],
+                                ),
+                                borderRadius: BorderRadius.all(Radius.circular(12)),
+                              ),
+                              child: Text(
+                                unreadCount.toString(),
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
                         ],
                       ),
                     ],
@@ -503,20 +561,5 @@ class _MessagingScreenState extends State<MessagingScreen> {
         ),
       ),
     );
-  }
-
-  String _formatTime(DateTime dateTime) {
-    final now = DateTime.now();
-    final difference = now.difference(dateTime);
-
-    if (difference.inDays == 0) {
-      return '${dateTime.hour.toString().padLeft(2, '0')}:${dateTime.minute.toString().padLeft(2, '0')}';
-    } else if (difference.inDays == 1) {
-      return 'Hier';
-    } else if (difference.inDays < 7) {
-      return '${difference.inDays}j';
-    } else {
-      return '${dateTime.day}/${dateTime.month}';
-    }
   }
 }
