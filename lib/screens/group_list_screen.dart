@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import '../services/group_service.dart';
-import 'group_detail_screen.dart';
+import 'group_chat_screen.dart';
 import 'GroupCreateScreen.dart';
 
 class GroupListScreen extends StatefulWidget {
@@ -13,41 +13,48 @@ class GroupListScreen extends StatefulWidget {
   State<GroupListScreen> createState() => _GroupListScreenState();
 }
 
-class _GroupListScreenState extends State<GroupListScreen> {
+class _GroupListScreenState extends State<GroupListScreen> with SingleTickerProviderStateMixin {
   late GroupService service;
-  List<Map<String, dynamic>> groups = [];
-  bool isLoading = true;
+  List<Map<String, dynamic>> myGroups = [];
+  List<Map<String, dynamic>> availableGroups = [];
+  bool isLoadingMyGroups = true;
+  bool isLoadingAvailable = true;
+  late TabController _tabController;
 
   @override
   void initState() {
     super.initState();
     service = GroupService(baseUrl: 'http://10.0.2.2:8000/api');
-    loadGroups();
+    _tabController = TabController(length: 2, vsync: this);
+    loadMyGroups();
+    loadAvailableGroups();
   }
 
-  Future<void> loadGroups() async {
-    setState(() => isLoading = true);
+  Future<void> loadMyGroups() async {
+    setState(() => isLoadingMyGroups = true);
     try {
       final fetchedGroups = await service.getUserGroups(widget.userToken);
       setState(() {
-        groups = fetchedGroups;
-        isLoading = false;
+        myGroups = fetchedGroups;
       });
     } catch (e) {
+      myGroups = [];
+    } finally {
+      if (mounted) setState(() => isLoadingMyGroups = false);
+    }
+  }
+
+  Future<void> loadAvailableGroups() async {
+    setState(() => isLoadingAvailable = true);
+    try {
+      final fetchedGroups = await service.getAvailableGroups(widget.userToken);
       setState(() {
-        groups = [];
-        isLoading = false;
+        availableGroups = fetchedGroups;
       });
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text('Erreur chargement groupes'),
-            backgroundColor: const Color(0xFFEF4444),
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          ),
-        );
-      }
+    } catch (e) {
+      availableGroups = [];
+    } finally {
+      if (mounted) setState(() => isLoadingAvailable = false);
     }
   }
 
@@ -58,128 +65,87 @@ class _GroupListScreenState extends State<GroupListScreen> {
         builder: (_) => GroupCreateScreen(userToken: widget.userToken),
       ),
     );
+    if (result == true) {
+      loadMyGroups();
+      loadAvailableGroups();
+    }
+  }
 
-    if (result == true) loadGroups();
+  Future<void> _deleteGroup(int id) async {
+    try {
+      await service.deleteGroup(widget.userToken, id);
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Groupe supprimé avec succès !"),
+          backgroundColor: Colors.green,
+        ),
+      );
+
+      loadMyGroups();
+      loadAvailableGroups();
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(e.toString().replaceAll("Exception: ", "")),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFC),
-      body: CustomScrollView(
-        slivers: [
-          SliverAppBar(
-            expandedHeight: 140,
-            floating: false,
-            pinned: true,
-            elevation: 0,
-            backgroundColor: const Color(0xFF8B5CF6),
-            flexibleSpace: FlexibleSpaceBar(
+      backgroundColor: const Color(0xFFF5F7FA),
+      body: Column(
+        children: [
+          Container(
+            height: 140,
+            child: AppBar(
               title: const Text(
                 'Mes Groupes',
                 style: TextStyle(
-                  color: Colors.white,
+                  color: Colors.black87,
                   fontWeight: FontWeight.bold,
                   fontSize: 20,
                 ),
               ),
-              centerTitle: true,
-              background: Container(color: const Color(0xFF8B5CF6)),
-            ),
-            actions: [
-              Container(
-                margin: const EdgeInsets.only(right: 12),
-                child: IconButton(
-                  icon: Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.2),
-                      borderRadius: BorderRadius.circular(12),
+              backgroundColor: Colors.white,
+              elevation: 0,
+              actions: [
+                Container(
+                  margin: const EdgeInsets.only(right: 12),
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFF3B82F6), Color(0xFF2563EB)],
                     ),
-                    child: const Icon(Icons.add_rounded, color: Colors.white),
+                    borderRadius: BorderRadius.circular(12),
                   ),
-                  onPressed: _createGroup,
-                  tooltip: "Créer un groupe",
-                ),
-              ),
-            ],
-          ),
-          isLoading
-              ? const SliverFillRemaining(
-            child: Center(
-              child: CircularProgressIndicator(
-                color: Color(0xFF8B5CF6),
-                strokeWidth: 3,
-              ),
-            ),
-          )
-              : groups.isEmpty
-              ? SliverFillRemaining(
-            child: Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(32),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFF5F3FF),
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(
-                      Icons.group_outlined,
-                      size: 80,
-                      color: Color(0xFF8B5CF6),
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-                  const Text(
-                    'Aucun groupe',
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                      color: Color(0xFF0F172A),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  const Text(
-                    'Créez votre premier groupe',
-                    style: TextStyle(
-                      fontSize: 15,
-                      color: Color(0xFF64748B),
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-                  ElevatedButton.icon(
+                  child: IconButton(
+                    icon: const Icon(Icons.add_rounded, color: Colors.white),
                     onPressed: _createGroup,
-                    icon: const Icon(Icons.add_rounded),
-                    label: const Text('Créer un groupe'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF8B5CF6),
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 24,
-                        vertical: 14,
-                      ),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      elevation: 0,
-                    ),
                   ),
+                ),
+              ],
+              bottom: TabBar(
+                controller: _tabController,
+                labelColor: const Color(0xFF3B82F6),
+                unselectedLabelColor: Colors.grey,
+                tabs: const [
+                  Tab(text: 'Mes Groupes'),
+                  Tab(text: 'Groupes disponibles'),
                 ],
               ),
             ),
-          )
-              : SliverPadding(
-            padding: const EdgeInsets.fromLTRB(16, 20, 16, 20),
-            sliver: SliverList(
-              delegate: SliverChildBuilderDelegate(
-                    (context, index) {
-                  final g = groups[index];
-                  return _buildGroupCard(g);
-                },
-                childCount: groups.length,
-              ),
+          ),
+          Expanded(
+            child: TabBarView(
+              controller: _tabController,
+              children: [
+                _buildGroupList(myGroups, isLoadingMyGroups),
+                _buildGroupList(availableGroups, isLoadingAvailable, joinable: true),
+              ],
             ),
           ),
         ],
@@ -187,118 +153,207 @@ class _GroupListScreenState extends State<GroupListScreen> {
     );
   }
 
-  Widget _buildGroupCard(Map<String, dynamic> group) {
-    final isCreator = group['creator_id'] == widget.userId;
+  Widget _buildGroupList(List<Map<String, dynamic>> groups, bool isLoading, {bool joinable = false}) {
+    if (isLoading) {
+      return const Center(child: CircularProgressIndicator());
+    }
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.04),
-            blurRadius: 10,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) => GroupDetailScreen(
-                  userToken: widget.userToken,
-                  userId: widget.userId,
-                  groupId: group['id'],
-                  groupName: group['nom'],
-                  creatorId: group['creator_id'],
-                ),
+    if (groups.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(32),
+              decoration: BoxDecoration(
+                color: const Color(0xFF3B82F6).withOpacity(0.1),
+                shape: BoxShape.circle,
               ),
-            );
-          },
-          borderRadius: BorderRadius.circular(16),
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFF5F3FF),
-                    borderRadius: BorderRadius.circular(14),
+              child: const Icon(Icons.group_outlined, size: 80, color: Color(0xFF3B82F6)),
+            ),
+            const SizedBox(height: 24),
+            Text(
+              joinable ? "Aucun groupe disponible" : "Aucun groupe",
+              style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.black87),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return ListView.builder(
+      padding: const EdgeInsets.all(16),
+      itemCount: groups.length,
+      itemBuilder: (context, index) {
+        final g = groups[index];
+        final isCreator = g['creator_id'] == widget.userId;
+
+        return Container(
+          margin: const EdgeInsets.only(bottom: 12),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            boxShadow: [
+              BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 10, offset: const Offset(0, 2)),
+            ],
+          ),
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: joinable
+                  ? null
+                  : () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => GroupChatScreen(
+                      userToken: widget.userToken,
+                      userId: widget.userId,
+                      groupId: g['id'],
+                      groupName: g['nom'],
+                      creatorId: g['creator_id'],
+                    ),
                   ),
-                  child: const Icon(
-                    Icons.group_rounded,
-                    color: Color(0xFF8B5CF6),
-                    size: 32,
-                  ),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
+                );
+              },
+              borderRadius: BorderRadius.circular(16),
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Row(
+                  children: [
+                    // === Icône groupe ===
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: [
+                            const Color(0xFF3B82F6).withOpacity(0.1),
+                            const Color(0xFF2563EB).withOpacity(0.1),
+                          ],
+                        ),
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      child: const Icon(Icons.group_rounded, color: Color(0xFF3B82F6), size: 32),
+                    ),
+
+                    const SizedBox(width: 16),
+
+                    // === Informations groupe ===
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Expanded(
-                            child: Text(
-                              group['nom'],
-                              style: const TextStyle(
-                                fontSize: 17,
-                                fontWeight: FontWeight.bold,
-                                color: Color(0xFF0F172A),
-                              ),
-                            ),
-                          ),
-                          if (isCreator)
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 8,
-                                vertical: 4,
-                              ),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFFF5F3FF),
-                                borderRadius: BorderRadius.circular(6),
-                              ),
-                              child: const Text(
-                                'Admin',
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w700,
-                                  color: Color(0xFF8B5CF6),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  g['nom'],
+                                  style: const TextStyle(
+                                    fontSize: 17,
+                                    fontWeight: FontWeight.bold,
+                                    color: Color(0xFF0F172A),
+                                  ),
                                 ),
                               ),
-                            ),
+
+                              // === Badges Admin ===
+                              if (isCreator && !joinable)
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    gradient: const LinearGradient(
+                                        colors: [Color(0xFF3B82F6), Color(0xFF2563EB)]),
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: const Text(
+                                    'Admin',
+                                    style: TextStyle(fontSize: 11, color: Colors.white),
+                                  ),
+                                ),
+                            ],
+                          ),
+
+                          const SizedBox(height: 6),
+
+                          Text(
+                            g['description'] ?? 'Pas de description',
+                            style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
                         ],
                       ),
-                      const SizedBox(height: 6),
-                      Text(
-                        group['description'] ?? 'Pas de description',
-                        style: const TextStyle(
-                          fontSize: 14,
-                          color: Color(0xFF64748B),
+                    ),
+
+                    const SizedBox(width: 12),
+
+                    // ===== Icône Chat (Mes groupes) =====
+                    if (!joinable)
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF3B82F6).withOpacity(0.1),
+                          shape: BoxShape.circle,
                         ),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
+                        child: const Icon(Icons.chat_bubble_rounded, size: 20, color: Color(0xFF3B82F6)),
                       ),
-                    ],
-                  ),
+
+                    // ===== Bouton SUPPRIMER (créateur uniquement) =====
+                    if (!joinable && isCreator)
+                      IconButton(
+                        icon: const Icon(Icons.delete, color: Colors.red),
+                        onPressed: () async {
+                          showDialog(
+                            context: context,
+                            builder: (_) => AlertDialog(
+                              title: const Text("Supprimer le groupe ?"),
+                              content: const Text("Voulez-vous vraiment supprimer ce groupe ?"),
+                              actions: [
+                                TextButton(
+                                  child: const Text("Annuler"),
+                                  onPressed: () => Navigator.pop(context),
+                                ),
+                                TextButton(
+                                  child: const Text("Supprimer", style: TextStyle(color: Colors.red)),
+                                  onPressed: () {
+                                    Navigator.pop(context);
+                                    _deleteGroup(g['id']);
+                                  },
+                                ),
+                              ],
+                            ),
+                          );
+                        },
+                      ),
+
+                    // ===== Bouton REJOINDRE (Groupes disponibles) =====
+                    if (joinable)
+                      ElevatedButton(
+                        onPressed: () async {
+                          try {
+                            await service.joinGroup(widget.userToken, g['id']);
+                            loadMyGroups();
+                            loadAvailableGroups();
+                          } catch (e) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(e.toString().replaceAll("Exception: ", "")),
+                                backgroundColor: Colors.red,
+                              ),
+                            );
+                          }
+
+                        },
+                        style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF3B82F6)),
+                        child: const Text('Rejoindre'),
+                      ),
+                  ],
                 ),
-                const SizedBox(width: 12),
-                const Icon(
-                  Icons.arrow_forward_ios_rounded,
-                  size: 16,
-                  color: Color(0xFF94A3B8),
-                ),
-              ],
+              ),
             ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 }

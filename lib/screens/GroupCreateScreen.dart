@@ -27,8 +27,14 @@ class _GroupCreateScreenState extends State<GroupCreateScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: const Text('Groupe créé avec succès !'),
-            backgroundColor: const Color(0xFF10B981),
+            content: const Row(
+              children: [
+                Icon(Icons.check_circle, color: Colors.white),
+                SizedBox(width: 12),
+                Text('Groupe créé avec succès !'),
+              ],
+            ),
+            backgroundColor: Colors.green,
             behavior: SnackBarBehavior.floating,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           ),
@@ -39,8 +45,14 @@ class _GroupCreateScreenState extends State<GroupCreateScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Erreur création groupe: $e'),
-            backgroundColor: const Color(0xFFEF4444),
+            content: Row(
+              children: [
+                const Icon(Icons.error_outline, color: Colors.white),
+                const SizedBox(width: 12),
+                Text('Erreur: $e'),
+              ],
+            ),
+            backgroundColor: Colors.redAccent,
             behavior: SnackBarBehavior.floating,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           ),
@@ -61,18 +73,18 @@ class _GroupCreateScreenState extends State<GroupCreateScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFC),
+      backgroundColor: const Color(0xFFF5F7FA),
       appBar: AppBar(
-        backgroundColor: const Color(0xFF8B5CF6),
         elevation: 0,
+        backgroundColor: Colors.white,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_rounded, color: Colors.white),
+          icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.black87),
           onPressed: () => Navigator.pop(context),
         ),
         title: const Text(
           'Créer un groupe',
           style: TextStyle(
-            color: Colors.white,
+            color: Colors.black87,
             fontWeight: FontWeight.w600,
             fontSize: 20,
           ),
@@ -89,16 +101,25 @@ class _GroupCreateScreenState extends State<GroupCreateScreen> {
               Container(
                 padding: const EdgeInsets.all(20),
                 decoration: BoxDecoration(
-                  color: const Color(0xFFF5F3FF),
+                  gradient: LinearGradient(
+                    colors: [
+                      const Color(0xFF3B82F6).withOpacity(0.1),
+                      const Color(0xFF2563EB).withOpacity(0.1),
+                    ],
+                  ),
                   borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: const Color(0xFF8B5CF6).withOpacity(0.2)),
+                  border: Border.all(
+                    color: const Color(0xFF3B82F6).withOpacity(0.2),
+                  ),
                 ),
                 child: Row(
                   children: [
                     Container(
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        color: const Color(0xFF8B5CF6),
+                        gradient: const LinearGradient(
+                          colors: [Color(0xFF3B82F6), Color(0xFF2563EB)],
+                        ),
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: const Icon(
@@ -112,9 +133,9 @@ class _GroupCreateScreenState extends State<GroupCreateScreen> {
                       child: Text(
                         'Créez un espace de discussion collaboratif',
                         style: TextStyle(
-                          color: Color(0xFF6D28D9),
+                          color: Color(0xFF1E40AF),
                           fontSize: 14,
-                          fontWeight: FontWeight.w500,
+                          fontWeight: FontWeight.w600,
                         ),
                       ),
                     ),
@@ -174,7 +195,7 @@ class _GroupCreateScreenState extends State<GroupCreateScreen> {
             decoration: InputDecoration(
               hintText: hint,
               hintStyle: const TextStyle(color: Color(0xFF94A3B8)),
-              prefixIcon: Icon(icon, color: const Color(0xFF8B5CF6)),
+              prefixIcon: Icon(icon, color: const Color(0xFF3B82F6)),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(14),
                 borderSide: BorderSide.none,
@@ -236,15 +257,29 @@ class _GroupCreateScreenState extends State<GroupCreateScreen> {
   }
 
   Widget _buildSubmitButton() {
-    return SizedBox(
+    return Container(
       width: double.infinity,
       height: 56,
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xFF3B82F6), Color(0xFF2563EB)],
+        ),
+        borderRadius: BorderRadius.circular(14),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF3B82F6).withOpacity(0.3),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
       child: ElevatedButton(
         onPressed: isLoading ? null : _createGroup,
         style: ElevatedButton.styleFrom(
-          backgroundColor: const Color(0xFF8B5CF6),
+          backgroundColor: Colors.transparent,
           foregroundColor: Colors.white,
           disabledBackgroundColor: const Color(0xFF94A3B8),
+          shadowColor: Colors.transparent,
           elevation: 0,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(14),

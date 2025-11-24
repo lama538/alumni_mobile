@@ -22,6 +22,20 @@ class MessageService {
       throw Exception('Erreur get users: ${response.body}');
     }
   }
+  static Future<List<AppMessage>> getSentMessages(String token) async {
+    final url = Uri.parse('${ApiService.baseUrl}/messages/sent');
+    final response = await http.get(url, headers: {
+      'Authorization': 'Bearer $token',
+      'Accept': 'application/json',
+    });
+
+    if (response.statusCode == 200) {
+      final List data = jsonDecode(response.body);
+      return data.map((json) => AppMessage.fromJson(json)).toList();
+    } else {
+      throw Exception('Erreur get sent messages: ${response.body}');
+    }
+  }
 
   // ✅ Récupérer tous les messages avec un utilisateur
   static Future<List<AppMessage>> getMessages(String token, int otherUserId) async {
@@ -41,8 +55,8 @@ class MessageService {
 
   // ✅ Envoyer un message texte ou média
   static Future<AppMessage> sendMessageWithMedia(
-      String token, int receiverId, String contenu, File? media) async {
-
+      String token, int receiverId, String contenu, File? media,
+      {int? messageId}) async {
     final prefs = await SharedPreferences.getInstance();
     final senderId = prefs.getInt('user_id');
     if (senderId == null) throw Exception("Aucun utilisateur connecté trouvé");
@@ -56,6 +70,10 @@ class MessageService {
       ..fields['receiver_id'] = receiverId.toString()
       ..fields['contenu'] = contenu.isNotEmpty ? contenu : '';
 
+    if (messageId != null) {
+      request.fields['message_id'] = messageId.toString(); // Pour édition
+    }
+
     // 🔹 Ajouter le fichier média si présent
     if (media != null) {
       final fileName = media.path.split('/').last;
@@ -64,8 +82,6 @@ class MessageService {
         media.path,
         filename: fileName,
       ));
-      // Optionnel: définir le type si le backend le nécessite
-      // request.fields['media_type'] = fileName.endsWith('.mp4') ? 'video' : 'image';
     }
 
     final streamedResponse = await request.send();
@@ -82,6 +98,48 @@ class MessageService {
   // ✅ Envoyer uniquement un message texte
   static Future<AppMessage> sendMessage(String token, int receiverId, String contenu) async {
     return sendMessageWithMedia(token, receiverId, contenu, null);
+  }
+
+  // ✅ Modifier un message existant
+  static Future<AppMessage> editMessage(String token, int messageId, String contenu, File? media) async {
+    final url = Uri.parse('${ApiService.baseUrl}/messages/$messageId');
+
+    var request = http.MultipartRequest('POST', url)
+      ..headers['Authorization'] = 'Bearer $token'
+      ..headers['Accept'] = 'application/json'
+      ..fields['contenu'] = contenu;
+
+    if (media != null) {
+      final fileName = media.path.split('/').last;
+      request.files.add(await http.MultipartFile.fromPath(
+        'media',
+        media.path,
+        filename: fileName,
+      ));
+    }
+
+    final streamedResponse = await request.send();
+    final response = await http.Response.fromStream(streamedResponse);
+
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body);
+      return AppMessage.fromJson(data);
+    } else {
+      throw Exception('Erreur edit message: ${response.body}');
+    }
+  }
+
+  // ✅ Supprimer un message
+  static Future<void> deleteMessage(String token, int messageId) async {
+    final url = Uri.parse('${ApiService.baseUrl}/messages/$messageId');
+    final response = await http.delete(url, headers: {
+      'Authorization': 'Bearer $token',
+      'Accept': 'application/json',
+    });
+
+    if (response.statusCode != 200) {
+      throw Exception('Erreur delete message: ${response.body}');
+    }
   }
 
   // ✅ Récupérer les messages reçus
@@ -126,6 +184,17 @@ class MessageService {
       return data.cast<Map<String, dynamic>>();
     } else {
       throw Exception('Erreur get inbox: ${response.body}');
+    }
+  }
+  static Future<void> deleteConversation(String token, int otherUserId) async {
+    final url = Uri.parse('${ApiService.baseUrl}/messages/conversation/$otherUserId');
+    final response = await http.delete(url, headers: {
+      'Authorization': 'Bearer $token',
+      'Accept': 'application/json',
+    });
+
+    if (response.statusCode != 200) {
+      throw Exception('Erreur delete conversation: ${response.body}');
     }
   }
 }

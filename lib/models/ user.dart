@@ -1,11 +1,9 @@
-// lib/models/user.dart
-
 class User {
   final int? id;
   final String name;
   final String email;
   final String role;
-  final String? photo; // ✅ ajouté pour la messagerie
+  String? photo; // ✅ rendue modifiable (enlève "final")
 
   User({
     this.id,
@@ -16,16 +14,21 @@ class User {
   });
 
   factory User.fromJson(Map<String, dynamic> json) {
+    String? photoPath;
+
+    if (json['photo'] != null) {
+      final rawPhoto = json['photo'].toString();
+      photoPath = rawPhoto.startsWith('http')
+          ? rawPhoto
+          : 'http://10.0.2.2:8000/storage/$rawPhoto';
+    }
+
     return User(
       id: json['id'] != null ? json['id'] as int : null,
       name: json['name'] ?? '',
       email: json['email'] ?? '',
       role: json['role'] ?? '',
-      photo: json['photo'] != null
-          ? (json['photo'].toString().startsWith('http')
-          ? json['photo']
-          : 'http://10.0.2.2:8000/storage/${json['photo']}')
-          : null,
+      photo: photoPath,
     );
   }
 

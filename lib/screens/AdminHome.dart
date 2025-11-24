@@ -7,20 +7,20 @@ import 'package:intl/intl.dart';
 import 'package:video_player/video_player.dart';
 import 'actualite_details_screen.dart';
 import 'AdminActualitesScreen.dart';
-import 'calendar_screen.dart';
-import 'group_list_screen.dart';
+import 'admin_dashboard.dart';
+import 'admin_events_screen.dart';
 import 'offre_list_screen.dart';
 import 'profil_screen.dart';
 import 'UserProfilScreen.dart';
 
-class AlumniHome extends StatefulWidget {
-  const AlumniHome({super.key});
+class AdminHome extends StatefulWidget {
+  const AdminHome({super.key});
 
   @override
-  State<AlumniHome> createState() => _AlumniHomeState();
+  State<AdminHome> createState() => _AdminHomeState();
 }
 
-class _AlumniHomeState extends State<AlumniHome> {
+class _AdminHomeState extends State<AdminHome> {
   String? userToken;
   int? userId;
   String? userPhoto;
@@ -30,6 +30,11 @@ class _AlumniHomeState extends State<AlumniHome> {
   String searchQuery = '';
   final TextEditingController _searchController = TextEditingController();
   Timer? _debounce;
+
+  // Couleurs
+  static const Color primaryBlue = Color(0xFF2563EB);
+  static const Color lightBlue = Color(0xFF3B82F6);
+  static const Color darkBlue = Color(0xFF1E40AF);
 
   @override
   void initState() {
@@ -62,7 +67,7 @@ class _AlumniHomeState extends State<AlumniHome> {
 
   ImageProvider getUserAvatar() {
     if (userPhoto != null && userPhoto!.isNotEmpty) {
-      return NetworkImage(getUserPhotoUrl(userPhoto));
+      return NetworkImage(userPhoto!);
     } else {
       return const AssetImage('assets/images/default_avatar.png');
     }
@@ -121,7 +126,9 @@ class _AlumniHomeState extends State<AlumniHome> {
         MaterialPageRoute(builder: (context) => const AdminActualitesScreen()),
       );
     } else {
-      setState(() => _currentIndex = index);
+      setState(() {
+        _currentIndex = index;
+      });
     }
   }
 
@@ -155,12 +162,8 @@ class _AlumniHomeState extends State<AlumniHome> {
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.clear();
-
       if (context.mounted) {
-        Navigator.of(context).pushNamedAndRemoveUntil(
-          '/welcome',
-              (route) => false,
-        );
+        Navigator.of(context).pushNamedAndRemoveUntil('/welcome', (route) => false);
       }
     } catch (e) {
       debugPrint('Erreur lors de la déconnexion: $e');
@@ -171,23 +174,8 @@ class _AlumniHomeState extends State<AlumniHome> {
     return AppBar(
       backgroundColor: Colors.white,
       elevation: 0,
-      leading: Padding(
-        padding: const EdgeInsets.all(8.0),
-        child: GestureDetector(
-          onTap: () async {
-            final updatedPhoto = await Navigator.push(
-              context,
-              MaterialPageRoute(builder: (context) => const ProfilScreen()),
-            );
-            if (updatedPhoto != null) await _loadUserData();
-          },
-          child: CircleAvatar(
-            radius: 20,
-            backgroundColor: Colors.grey[200],
-            backgroundImage: getUserAvatar(),
-          ),
-        ),
-      ),
+      automaticallyImplyLeading: false,
+
       title: isSearching
           ? TextField(
         controller: _searchController,
@@ -199,16 +187,49 @@ class _AlumniHomeState extends State<AlumniHome> {
           hintStyle: TextStyle(color: Colors.grey),
         ),
       )
-          : SizedBox(
-        height: 300,
-        child: Center(
-          child: Image.asset(
-            'assets/images/logo.png',
-            fit: BoxFit.contain,
+          : Row(
+        children: [
+          // 🔥 LOGO BIEN VISIBLE ET TOUJOURS À GAUCHE
+          SizedBox(
+            height: kToolbarHeight,         // hauteur naturelle de l'appbar
+            width: 140,                     // 👉 largeur visible du logo
+            child: FittedBox(
+              alignment: Alignment.centerLeft,
+              fit: BoxFit.contain,
+              child: SizedBox(
+                height: 250,                // taille réelle du logo (grand mais contenu)
+                child: Image.asset(
+                  "assets/images/logo.png",
+                  fit: BoxFit.contain,
+                ),
+              ),
+            ),
           ),
-        ),
+
+          const SizedBox(width: 8),
+
+          // BADGE ADMIN
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: primaryBlue,
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: const Text(
+              'ADMIN',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 10,
+                fontWeight: FontWeight.bold,
+                letterSpacing: 0.5,
+              ),
+            ),
+          ),
+        ],
       ),
-      centerTitle: true,
+
+      centerTitle: false, // 👈 Permet d'avoir le logo VRAIMENT à gauche
+
       actions: [
         IconButton(
           icon: Icon(
@@ -226,11 +247,8 @@ class _AlumniHomeState extends State<AlumniHome> {
           },
         ),
         IconButton(
-          icon: const Icon(Icons.message_outlined, color: Color(0xFF1A1A1A)),
-          onPressed: () => Navigator.pushNamed(context, '/messages'),
-        ),
-        IconButton(
-          icon: const Icon(Icons.notifications_outlined, color: Color(0xFF1A1A1A)),
+          icon: const Icon(Icons.notifications_outlined,
+              color: Color(0xFF1A1A1A)),
           onPressed: () => Navigator.pushNamed(context, '/notifications'),
         ),
         PopupMenuButton<String>(
@@ -253,10 +271,11 @@ class _AlumniHomeState extends State<AlumniHome> {
             ),
           ],
         ),
-        const SizedBox(width: 8),
       ],
     );
   }
+
+
 
   @override
   Widget build(BuildContext context) {
@@ -268,10 +287,10 @@ class _AlumniHomeState extends State<AlumniHome> {
 
     final screens = [
       ActualitesFeedScreen(userToken: userToken, searchQuery: searchQuery),
-      CalendarScreen(userToken: userToken!, userId: userId!),
+      const AdminDashboard(),
       const SizedBox(),
+      AdminEventsScreen(),
       const OffreListScreen(),
-      GroupListScreen(userToken: userToken!, userId: userId!),
     ];
 
     return WillPopScope(
@@ -286,55 +305,61 @@ class _AlumniHomeState extends State<AlumniHome> {
         backgroundColor: const Color(0xFFF8F9FA),
         appBar: _buildAppBar(context),
         body: screens[_currentIndex],
-        bottomNavigationBar: _buildBottomNav(),
-      ),
-    );
-  }
-
-  Widget _buildBottomNav() {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        border: Border(top: BorderSide(color: Colors.grey.shade200, width: 1)),
-      ),
-      child: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
-            children: [
-              _buildNavItem(Icons.home_outlined, Icons.home, "Accueil", 0),
-              _buildNavItem(Icons.event_outlined, Icons.event, "Événements", 1),
-              _buildAddButton(),
-              _buildNavItem(Icons.work_outline, Icons.work, "Offres", 3),
-              _buildNavItem(Icons.group_outlined, Icons.group, "Groupes", 4),
-            ],
+        bottomNavigationBar: Container(
+          decoration: BoxDecoration(
+            color: Colors.white,
+            border: Border(
+              top: BorderSide(color: Colors.grey.shade200, width: 1),
+            ),
+          ),
+          child: SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceAround,
+                children: [
+                  _buildNavItem(Icons.home_outlined, Icons.home, "Accueil", 0),
+                  _buildNavItem(Icons.dashboard_outlined, Icons.dashboard,
+                      "Dashboard", 1),
+                  _buildAddButton(),
+                  _buildNavItem(Icons.event_outlined, Icons.event, "Événements", 3),
+                  _buildNavItem(Icons.work_outline, Icons.work, "Offres", 4),
+                ],
+              ),
+            ),
           ),
         ),
       ),
     );
   }
 
-  Widget _buildNavItem(IconData outlinedIcon, IconData filledIcon, String label, int index) {
+  Widget _buildNavItem(
+      IconData outlinedIcon, IconData filledIcon, String label, int index) {
     final isSelected = _currentIndex == index;
     return Expanded(
       child: GestureDetector(
         onTap: () => _onTabTapped(index),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(isSelected ? filledIcon : outlinedIcon,
-                color: isSelected ? const Color(0xFF2196F3) : const Color(0xFF757575)),
-            const SizedBox(height: 4),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 11,
-                fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
-                color: isSelected ? const Color(0xFF2196F3) : const Color(0xFF757575),
+        behavior: HitTestBehavior.opaque,
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(isSelected ? filledIcon : outlinedIcon,
+                  color: isSelected ? primaryBlue : const Color(0xFF757575),
+                  size: 26),
+              const SizedBox(height: 4),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
+                  color: isSelected ? primaryBlue : const Color(0xFF757575),
+                ),
+                textAlign: TextAlign.center,
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -347,15 +372,12 @@ class _AlumniHomeState extends State<AlumniHome> {
         width: 56,
         height: 56,
         decoration: BoxDecoration(
-          color: const Color(0xFF2196F3),
+          gradient: LinearGradient(
+            colors: [primaryBlue, lightBlue],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
           borderRadius: BorderRadius.circular(16),
-          boxShadow: [
-            BoxShadow(
-              color: const Color(0xFF2196F3).withOpacity(0.25),
-              blurRadius: 8,
-              offset: const Offset(0, 2),
-            ),
-          ],
         ),
         child: const Icon(Icons.add, color: Colors.white, size: 28),
       ),
@@ -363,7 +385,7 @@ class _AlumniHomeState extends State<AlumniHome> {
   }
 }
 
-// ==================== ActualitesFeedScreen ====================
+// ==================== ActualitesFeedScreen intégré dans AdminHome ====================
 class ActualitesFeedScreen extends StatefulWidget {
   final String? userToken;
   final String searchQuery;
@@ -402,15 +424,9 @@ class _ActualitesFeedScreenState extends State<ActualitesFeedScreen> {
 
   String getAuthorPhotoUrl(Map<String, dynamic>? auteur) {
     if (auteur == null) return '';
-
-    String? photo = auteur['photo'];
-    if (photo == null || photo.isEmpty) {
-      photo = auteur['profil']?['photo'];
-    }
-
+    String? photo = auteur['photo'] ?? auteur['profil']?['photo'];
     if (photo == null || photo.isEmpty) return '';
     if (photo.startsWith('http')) return photo;
-
     return 'http://10.0.2.2:8000/storage/$photo';
   }
 
@@ -428,11 +444,9 @@ class _ActualitesFeedScreenState extends State<ActualitesFeedScreen> {
       if (response.statusCode == 200) {
         final data = List<Map<String, dynamic>>.from(jsonDecode(response.body));
         setState(() => actualites = data);
-      } else {
-        debugPrint('Erreur chargement actualités: ${response.statusCode}');
       }
     } catch (e) {
-      debugPrint("Erreur réseau: $e");
+      debugPrint("Erreur chargement actualités: $e");
     } finally {
       setState(() => isLoading = false);
     }
@@ -529,82 +543,6 @@ class _ActualitesFeedScreenState extends State<ActualitesFeedScreen> {
       child: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          if (profilsTrouves.isNotEmpty) ...[
-            const Padding(
-              padding: EdgeInsets.only(bottom: 8),
-              child: Text(
-                "Personnes",
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w700,
-                  color: Color(0xFF1A1A1A),
-                ),
-              ),
-            ),
-            SizedBox(
-              height: 110,
-              child: ListView.builder(
-                scrollDirection: Axis.horizontal,
-                itemCount: profilsTrouves.length,
-                itemBuilder: (context, index) {
-                  final p = profilsTrouves[index];
-                  final photoUrl = getAuthorPhotoUrl(p);
-                  return GestureDetector(
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => UserProfilScreen(userId: p['id']),
-                        ),
-                      );
-                    },
-                    child: Container(
-                      margin: const EdgeInsets.only(right: 12),
-                      width: 75,
-                      child: Column(
-                        children: [
-                          CircleAvatar(
-                            radius: 32,
-                            backgroundColor: Colors.grey[200],
-                            backgroundImage: photoUrl.isNotEmpty
-                                ? NetworkImage(photoUrl)
-                                : const AssetImage('assets/images/default_avatar.png')
-                            as ImageProvider,
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            p['name'] ?? 'Utilisateur',
-                            maxLines: 2,
-                            textAlign: TextAlign.center,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  );
-                },
-              ),
-            ),
-            const SizedBox(height: 24),
-            const Divider(),
-            const SizedBox(height: 16),
-          ],
-          if (widget.searchQuery.isNotEmpty && filteredActualites.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 12),
-              child: Text(
-                "Actualités (${filteredActualites.length})",
-                style: const TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w700,
-                  color: Color(0xFF1A1A1A),
-                ),
-              ),
-            ),
           ...filteredActualites.map((act) {
             String? imageUrl = act['image'];
             String? videoUrl = act['video'];
@@ -630,12 +568,6 @@ class _ActualitesFeedScreenState extends State<ActualitesFeedScreen> {
               decoration: BoxDecoration(
                 color: Colors.white,
                 borderRadius: BorderRadius.circular(16),
-                boxShadow: [
-                  BoxShadow(
-                      color: Colors.black.withOpacity(0.04),
-                      blurRadius: 8,
-                      offset: const Offset(0, 2)),
-                ],
               ),
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(16),
@@ -643,133 +575,53 @@ class _ActualitesFeedScreenState extends State<ActualitesFeedScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     if (videoUrl != null && videoUrl.isNotEmpty)
-                      SizedBox(height: 200, child: VideoPlayerWidget(videoUrl: videoUrl))
-                    else if (imageUrl != null && imageUrl.isNotEmpty)
-                      Image.network(
-                        imageUrl,
-                        fit: BoxFit.cover,
-                        width: double.infinity,
-                        height: 200,
-                        errorBuilder: (_, __, ___) => Container(
-                          height: 200,
-                          color: const Color(0xFFF0F0F0),
-                          child: const Icon(Icons.image_outlined,
-                              size: 60, color: Color(0xFFBDBDBD)),
-                        ),
-                      ),
+                      VideoPlayerWidget(videoUrl: videoUrl),
+                    if (imageUrl != null && imageUrl.isNotEmpty)
+                      Image.network(imageUrl, fit: BoxFit.cover),
                     Padding(
-                      padding: const EdgeInsets.all(16),
+                      padding: const EdgeInsets.all(12),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Row(
                             children: [
-                              GestureDetector(
-                                onTap: () {
-                                  if (act['auteur']?['id'] != null) {
-                                    Navigator.push(
-                                      context,
-                                      MaterialPageRoute(
-                                        builder: (context) => UserProfilScreen(
-                                            userId: act['auteur']['id']),
-                                      ),
-                                    );
-                                  }
-                                },
-                                child: CircleAvatar(
-                                  radius: 18,
-                                  backgroundColor: Colors.grey[200],
-                                  backgroundImage: authorPhotoUrl.isNotEmpty
-                                      ? NetworkImage(authorPhotoUrl)
-                                      : const AssetImage(
-                                      'assets/images/default_avatar.png')
-                                  as ImageProvider,
-                                ),
+                              CircleAvatar(
+                                radius: 18,
+                                backgroundImage: authorPhotoUrl.isNotEmpty
+                                    ? NetworkImage(authorPhotoUrl)
+                                    : const AssetImage('assets/images/default_avatar.png') as ImageProvider,
                               ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    GestureDetector(
-                                      onTap: () {
-                                        if (act['auteur']?['id'] != null) {
-                                          Navigator.push(
-                                            context,
-                                            MaterialPageRoute(
-                                              builder: (context) =>
-                                                  UserProfilScreen(
-                                                      userId: act['auteur']['id']),
-                                            ),
-                                          );
-                                        }
-                                      },
-                                      child: Text(
-                                        auteur,
-                                        style: const TextStyle(
-                                          fontSize: 14,
-                                          fontWeight: FontWeight.w600,
-                                          color: Color(0xFF1A1A1A),
-                                          decoration: TextDecoration.underline,
-                                        ),
-                                      ),
-                                    ),
-                                    Text(date,
-                                        style: TextStyle(
-                                            fontSize: 12, color: Colors.grey[600])),
-                                  ],
-                                ),
+                              const SizedBox(width: 8),
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(auteur, style: const TextStyle(fontWeight: FontWeight.bold)),
+                                  Text(date, style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                                ],
                               ),
                             ],
                           ),
-                          const SizedBox(height: 14),
-                          Text(act['titre'] ?? '',
-                              style: const TextStyle(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.w700,
-                                  height: 1.3)),
                           const SizedBox(height: 8),
                           Text(
-                            act['contenu']?.length > 120
-                                ? '${act['contenu'].substring(0, 120)}...'
-                                : act['contenu'] ?? '',
-                            style: TextStyle(
-                                fontSize: 15, color: Colors.grey[700], height: 1.5),
+                            act['contenu'] ?? '',
+                            style: const TextStyle(fontSize: 14),
                           ),
-                          const SizedBox(height: 16),
-                          Divider(color: Colors.grey[200]),
+                          const SizedBox(height: 8),
                           Row(
                             children: [
-                              InkWell(
+                              GestureDetector(
                                 onTap: () => _toggleLike(act),
-                                child: Row(
-                                  children: [
-                                    Icon(
-                                      liked ? Icons.favorite : Icons.favorite_border,
-                                      color: liked ? const Color(0xFFE91E63) : Colors.grey[600],
-                                    ),
-                                    const SizedBox(width: 6),
-                                    Text("$likesCount", style: const TextStyle(fontWeight: FontWeight.w600)),
-                                  ],
+                                child: Icon(
+                                  liked ? Icons.favorite : Icons.favorite_border,
+                                  color: liked ? Colors.red : Colors.grey,
                                 ),
                               ),
-                              const SizedBox(width: 12),
-                              InkWell(
-                                onTap: () {
-                                  Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                        builder: (context) => ActualiteDetailsScreen(actualite: act)),
-                                  );
-                                },
-                                child: Row(
-                                  children: [
-                                    Icon(Icons.chat_bubble_outline, color: Colors.grey[600]),
-                                    const SizedBox(width: 6),
-                                    Text("$commentsCount", style: const TextStyle(fontWeight: FontWeight.w600)),
-                                  ],
-                                ),
-                              ),
+                              const SizedBox(width: 4),
+                              Text(likesCount.toString()),
+                              const SizedBox(width: 16),
+                              const Icon(Icons.comment, color: Colors.grey),
+                              const SizedBox(width: 4),
+                              Text(commentsCount.toString()),
                             ],
                           ),
                         ],
@@ -779,14 +631,13 @@ class _ActualitesFeedScreenState extends State<ActualitesFeedScreen> {
                 ),
               ),
             );
-          }),
+          }).toList(),
         ],
       ),
     );
   }
 }
 
-// ==================== VideoPlayerWidget ====================
 class VideoPlayerWidget extends StatefulWidget {
   final String videoUrl;
   const VideoPlayerWidget({super.key, required this.videoUrl});
@@ -803,8 +654,11 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget> {
   void initState() {
     super.initState();
     _controller = VideoPlayerController.network(widget.videoUrl)
-      ..initialize().then((_) => setState(() => isInitialized = true));
-    _controller.setLooping(true);
+      ..initialize().then((_) {
+        setState(() => isInitialized = true);
+        _controller.setLooping(true);
+        _controller.play();
+      });
   }
 
   @override
@@ -815,22 +669,15 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget> {
 
   @override
   Widget build(BuildContext context) {
-    if (!isInitialized) {
-      return const Center(child: CircularProgressIndicator());
-    }
-    return GestureDetector(
-      onTap: () => setState(
-              () => _controller.value.isPlaying ? _controller.pause() : _controller.play()),
-      child: Stack(
-        alignment: Alignment.center,
-        children: [
-          AspectRatio(
-              aspectRatio: _controller.value.aspectRatio,
-              child: VideoPlayer(_controller)),
-          if (!_controller.value.isPlaying)
-            const Icon(Icons.play_arrow, color: Colors.white, size: 50),
-        ],
-      ),
+    return isInitialized
+        ? AspectRatio(
+      aspectRatio: _controller.value.aspectRatio,
+      child: VideoPlayer(_controller),
+    )
+        : Container(
+      height: 200,
+      color: Colors.black12,
+      child: const Center(child: CircularProgressIndicator()),
     );
   }
 }

@@ -15,6 +15,7 @@ import 'screens/offre_list_screen.dart';
 import 'screens/notification_screen.dart';
 import 'services/notification_service.dart';
 import 'screens/group_list_screen.dart';
+import 'screens/AdminHome.dart'; // <- Import de la page AdminHome
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -33,7 +34,10 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       title: 'Alumni Platform',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(useMaterial3: true, colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue)),
+      theme: ThemeData(
+        useMaterial3: true,
+        colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
+      ),
       home: const WelcomeScreen(),
       routes: {
         "/welcome": (context) => const WelcomeScreen(),
@@ -49,6 +53,10 @@ class MyApp extends StatelessWidget {
         "/notifications": (context) => const NotificationScreen(),
         "/admin-events": (context) => const AdminEventsScreen(),
         "/alumniProfile": (context) => const AlumniProfileScreen(),
+
+        // Ajout de la page AdminHome
+        "/adminHome": (context) => const AdminHome(),
+
         '/groups': (context) {
           final args = ModalRoute.of(context)!.settings.arguments as Map<String, dynamic>;
           return GroupListScreen(
@@ -58,14 +66,12 @@ class MyApp extends StatelessWidget {
         },
 
         '/events': (context) {
-          // On suppose que vous avez passé un Map<String, dynamic> contenant token et userId
           final args = ModalRoute.of(context)!.settings.arguments as Map<String, dynamic>;
           return CalendarScreen(
             userToken: args['token'] as String,
             userId: args['userId'] as int,
           );
         },
-
       },
     );
   }

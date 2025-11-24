@@ -35,6 +35,8 @@ class _ChatScreenState extends State<ChatScreen> {
   VideoPlayerController? previewVideoController;
   Map<int, VideoPlayerController> videoControllers = {};
 
+  AppMessage? editingMessage;
+
   @override
   void initState() {
     super.initState();
@@ -161,37 +163,39 @@ class _ChatScreenState extends State<ChatScreen> {
     final text = messageController.text.trim();
     if (text.isEmpty && selectedMedia == null) return;
 
-    final tempMsg = AppMessage(
-      id: DateTime.now().millisecondsSinceEpoch,
-      senderId: widget.currentUserId,
-      receiverId: widget.selectedUser.id!,
-      contenu: text,
-      media: selectedMedia?.path,
-      mediaType: selectedMediaType,
-      isRead: false,
-      senderName: "Moi",
-      receiverName: widget.selectedUser.name,
-      createdAt: DateTime.now(),
-    );
-
-    setState(() {
-      messages.add(tempMsg);
-      isSending = true;
-    });
-
-    messageController.clear();
+    setState(() => isSending = true);
 
     try {
-      final sentMsg = await MessageService.sendMessageWithMedia(
-        widget.token,
-        widget.selectedUser.id!,
-        text,
-        selectedMedia,
-      );
+      if (editingMessage != null) {
+        // 🔥 Mode édition
+        final updatedMsg = await MessageService.editMessage(
+          widget.token,
+          editingMessage!.id,
+          text,
+          selectedMedia,
+        );
 
+        setState(() {
+          final index = messages.indexWhere((m) => m.id == editingMessage!.id);
+          if (index != -1) messages[index] = updatedMsg;
+          editingMessage = null;
+        });
+      } else {
+        // 🔥 Nouveau message
+        final sentMsg = await MessageService.sendMessageWithMedia(
+          widget.token,
+          widget.selectedUser.id!,
+          text,
+          selectedMedia,
+        );
+
+        setState(() {
+          messages.add(sentMsg);
+        });
+      }
+
+      messageController.clear();
       setState(() {
-        final index = messages.indexOf(tempMsg);
-        if (index != -1) messages[index] = sentMsg;
         previewVideoController?.dispose();
         previewVideoController = null;
         selectedMedia = null;
@@ -241,6 +245,147 @@ class _ChatScreenState extends State<ChatScreen> {
         },
       ),
     );
+  }
+
+  // 🔥 NOUVELLE FONCTION : Afficher les options du message
+  void _showMessageOptions(AppMessage msg) {
+    // Vérifier que c'est bien mon message
+    if (msg.senderId != widget.currentUserId) return;
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (_) => Container(
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        child: SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const SizedBox(height: 12),
+              Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade300,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const SizedBox(height: 24),
+              ListTile(
+                leading: Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: Colors.blue.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Icon(Icons.edit_rounded, color: Colors.blue),
+                ),
+                title: const Text('Modifier', style: TextStyle(fontWeight: FontWeight.w600)),
+                onTap: () {
+                  Navigator.pop(context);
+                  _editMessage(msg);
+                },
+              ),
+              ListTile(
+                leading: Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: Colors.red.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Icon(Icons.delete_rounded, color: Colors.red),
+                ),
+                title: const Text('Supprimer', style: TextStyle(fontWeight: FontWeight.w600)),
+                onTap: () {
+                  Navigator.pop(context);
+                  _deleteMessage(msg);
+                },
+              ),
+              const SizedBox(height: 16),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // 🔥 NOUVELLE FONCTION : Préparer l'édition
+  void _editMessage(AppMessage msg) {
+    messageController.text = msg.contenu;
+
+    if (msg.media != null) {
+      setState(() {
+        selectedMedia = File(msg.media!);
+        selectedMediaType = msg.mediaType;
+
+        if (msg.mediaType == "video") {
+          previewVideoController?.dispose();
+          previewVideoController = VideoPlayerController.file(selectedMedia!)
+            ..initialize().then((_) {
+              setState(() {});
+            });
+        }
+      });
+    }
+
+    setState(() => editingMessage = msg);
+  }
+
+  // 🔥 NOUVELLE FONCTION : Supprimer le message
+  Future<void> _deleteMessage(AppMessage msg) async {
+    // Confirmation avant suppression
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('Supprimer le message ?'),
+        content: const Text('Cette action est irréversible.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Annuler'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Supprimer'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+
+    try {
+      await MessageService.deleteMessage(widget.token, msg.id);
+      setState(() => messages.remove(msg));
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Row(
+            children: [
+              Icon(Icons.check_circle, color: Colors.white),
+              SizedBox(width: 12),
+              Text("Message supprimé"),
+            ],
+          ),
+          backgroundColor: Colors.green,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        ),
+      );
+    } catch (e) {
+      debugPrint("Erreur suppression message: $e");
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Échec de la suppression"),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
   }
 
   Widget _buildMessageItem(AppMessage msg) {
@@ -333,90 +478,99 @@ class _ChatScreenState extends State<ChatScreen> {
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 16),
-      child: Row(
-        mainAxisAlignment: isMe ? MainAxisAlignment.end : MainAxisAlignment.start,
-        crossAxisAlignment: CrossAxisAlignment.end,
-        children: [
-          if (!isMe) ...[
-            CircleAvatar(
-              radius: 16,
-              backgroundImage: widget.selectedUser.photo != null &&
-                  widget.selectedUser.photo!.isNotEmpty
-                  ? NetworkImage(widget.selectedUser.photo!)
-                  : const AssetImage('assets/images/avatar.png') as ImageProvider,
-            ),
-            const SizedBox(width: 8),
-          ],
-          Flexible(
-            child: Column(
-              crossAxisAlignment: isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
-              children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                  decoration: BoxDecoration(
-                    gradient: isMe
-                        ? const LinearGradient(
-                      colors: [Color(0xFF3B82F6), Color(0xFF2563EB)],
-                    )
-                        : null,
-                    color: isMe ? null : Colors.white,
-                    borderRadius: BorderRadius.only(
-                      topLeft: const Radius.circular(20),
-                      topRight: const Radius.circular(20),
-                      bottomLeft: Radius.circular(isMe ? 20 : 4),
-                      bottomRight: Radius.circular(isMe ? 4 : 20),
-                    ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.05),
-                        blurRadius: 10,
-                        offset: const Offset(0, 2),
+      child: GestureDetector(
+        onLongPress: () => _showMessageOptions(msg), // 🔥 Long press pour options
+        child: Row(
+          mainAxisAlignment: isMe ? MainAxisAlignment.end : MainAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            if (!isMe) ...[
+              CircleAvatar(
+                radius: 16,
+                backgroundImage: widget.selectedUser.photo != null &&
+                    widget.selectedUser.photo!.isNotEmpty
+                    ? NetworkImage(widget.selectedUser.photo!)
+                    : const AssetImage('assets/images/avatar.png') as ImageProvider,
+              ),
+              const SizedBox(width: 8),
+            ],
+            Flexible(
+              child: Column(
+                crossAxisAlignment:
+                isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    decoration: BoxDecoration(
+                      gradient: isMe
+                          ? const LinearGradient(
+                        colors: [Color(0xFF3B82F6), Color(0xFF2563EB)],
+                      )
+                          : null,
+                      color: isMe ? null : Colors.white,
+                      borderRadius: BorderRadius.only(
+                        topLeft: const Radius.circular(20),
+                        topRight: const Radius.circular(20),
+                        bottomLeft: Radius.circular(isMe ? 20 : 4),
+                        bottomRight: Radius.circular(isMe ? 4 : 20),
                       ),
-                    ],
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      if (msg.contenu.isNotEmpty)
-                        Text(
-                          msg.contenu,
-                          style: TextStyle(
-                            color: isMe ? Colors.white : Colors.black87,
-                            fontSize: 15,
-                            height: 1.4,
-                          ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.05),
+                          blurRadius: 10,
+                          offset: const Offset(0, 2),
                         ),
-                      if (msg.media != null && msg.contenu.isNotEmpty)
-                        const SizedBox(height: 8),
-                      if (msg.media != null) mediaWidget!,
+                      ],
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        if (msg.contenu.isNotEmpty)
+                          Text(
+                            msg.contenu,
+                            style: TextStyle(
+                              color: isMe ? Colors.white : Colors.black87,
+                              fontSize: 15,
+                              height: 1.4,
+                            ),
+                          ),
+                        if (msg.media != null && msg.contenu.isNotEmpty)
+                          const SizedBox(height: 8),
+                        if (msg.media != null) mediaWidget!,
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        _formatTime(msg.createdAt),
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: Colors.grey.shade600,
+                        ),
+                      ),
+                      if (isMe) ...[
+                        const SizedBox(width: 4),
+                        Icon(
+                          msg.isRead
+                              ? Icons.done_all_rounded
+                              : Icons.done_rounded,
+                          size: 14,
+                          color: msg.isRead
+                              ? const Color(0xFF3B82F6)
+                              : Colors.grey.shade400,
+                        ),
+                      ],
                     ],
                   ),
-                ),
-                const SizedBox(height: 4),
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      _formatTime(msg.createdAt),
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: Colors.grey.shade600,
-                      ),
-                    ),
-                    if (isMe) ...[
-                      const SizedBox(width: 4),
-                      Icon(
-                        msg.isRead ? Icons.done_all_rounded : Icons.done_rounded,
-                        size: 14,
-                        color: msg.isRead ? const Color(0xFF3B82F6) : Colors.grey.shade400,
-                      ),
-                    ],
-                  ],
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -491,6 +645,44 @@ class _ChatScreenState extends State<ChatScreen> {
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           child: Column(
             children: [
+              // 🔥 Indicateur de mode édition
+              if (editingMessage != null)
+                Container(
+                  margin: const EdgeInsets.only(bottom: 12),
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.blue.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.edit, color: Colors.blue, size: 20),
+                      const SizedBox(width: 12),
+                      const Expanded(
+                        child: Text(
+                          'Modification en cours...',
+                          style: TextStyle(
+                            color: Colors.blue,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close, size: 20),
+                        onPressed: () {
+                          setState(() {
+                            editingMessage = null;
+                            messageController.clear();
+                            selectedMedia = null;
+                            selectedMediaType = null;
+                            previewVideoController?.dispose();
+                            previewVideoController = null;
+                          });
+                        },
+                      ),
+                    ],
+                  ),
+                ),
               if (selectedMedia != null)
                 Container(
                   margin: const EdgeInsets.only(bottom: 12),
@@ -556,30 +748,22 @@ class _ChatScreenState extends State<ChatScreen> {
                             vertical: 12,
                           ),
                         ),
-                        maxLines: null,
                       ),
                     ),
                   ),
                   const SizedBox(width: 12),
-                  Container(
-                    decoration: const BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [Color(0xFF3B82F6), Color(0xFF2563EB)],
+                  GestureDetector(
+                    onTap: isSending ? null : sendMessage,
+                    child: CircleAvatar(
+                      backgroundColor: const Color(0xFF3B82F6),
+                      child: Icon(
+                        isSending
+                            ? Icons.hourglass_top
+                            : editingMessage != null
+                            ? Icons.check
+                            : Icons.send,
+                        color: Colors.white,
                       ),
-                      shape: BoxShape.circle,
-                    ),
-                    child: IconButton(
-                      icon: isSending
-                          ? const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                        ),
-                      )
-                          : const Icon(Icons.send_rounded, color: Colors.white),
-                      onPressed: isSending ? null : sendMessage,
                     ),
                   ),
                 ],
@@ -594,61 +778,27 @@ class _ChatScreenState extends State<ChatScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F7FA),
       appBar: AppBar(
-        elevation: 0,
-        backgroundColor: Colors.white,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.black87),
-          onPressed: () => Navigator.pop(context),
-        ),
         title: Row(
           children: [
             CircleAvatar(
-              radius: 20,
               backgroundImage: widget.selectedUser.photo != null &&
                   widget.selectedUser.photo!.isNotEmpty
                   ? NetworkImage(widget.selectedUser.photo!)
                   : const AssetImage('assets/images/avatar.png') as ImageProvider,
             ),
             const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    widget.selectedUser.name,
-                    style: const TextStyle(
-                      color: Colors.black87,
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  Text(
-                    'En ligne',
-                    style: TextStyle(
-                      color: Colors.grey.shade600,
-                      fontSize: 12,
-                    ),
-                  ),
-                ],
-              ),
-            ),
+            Text(widget.selectedUser.name),
           ],
         ),
       ),
-      body: Column(
+      body: isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : Column(
         children: [
           Expanded(
-            child: isLoading
-                ? const Center(
-              child: CircularProgressIndicator(
-                valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF3B82F6)),
-              ),
-            )
-                : ListView.builder(
+            child: ListView.builder(
               controller: scrollController,
-              padding: const EdgeInsets.symmetric(vertical: 16),
               itemCount: messages.length,
               itemBuilder: (context, index) {
                 final msg = messages[index];
@@ -663,7 +813,7 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 }
 
-class _MediaFullScreenView extends StatefulWidget {
+class _MediaFullScreenView extends StatelessWidget {
   final AppMessage message;
   final Map<int, VideoPlayerController> videoControllers;
 
@@ -673,110 +823,26 @@ class _MediaFullScreenView extends StatefulWidget {
   });
 
   @override
-  State<_MediaFullScreenView> createState() => _MediaFullScreenViewState();
-}
-
-class _MediaFullScreenViewState extends State<_MediaFullScreenView> {
-  VideoPlayerController? _controller;
-
-  @override
-  void initState() {
-    super.initState();
-    if (widget.message.mediaType == "video") {
-      _controller = widget.videoControllers[widget.message.id];
-    }
-  }
-
-  @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.black,
-      body: Stack(
-        children: [
-          Center(
-            child: widget.message.mediaType == "video" && _controller != null
-                ? _controller!.value.isInitialized
-                ? GestureDetector(
-              onTap: () {
-                setState(() {
-                  if (_controller!.value.isPlaying) {
-                    _controller!.pause();
-                  } else {
-                    _controller!.play();
-                  }
-                });
-              },
-              child: AspectRatio(
-                aspectRatio: _controller!.value.aspectRatio,
-                child: Stack(
-                  alignment: Alignment.center,
-                  children: [
-                    VideoPlayer(_controller!),
-                    if (!_controller!.value.isPlaying)
-                      Icon(
-                        Icons.play_circle_filled,
-                        size: 80,
-                        color: Colors.white.withOpacity(0.9),
-                      ),
-                  ],
-                ),
-              ),
-            )
-                : const CircularProgressIndicator(
-              valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-            )
-                : InteractiveViewer(
-              minScale: 0.5,
-              maxScale: 4.0,
-              child: Hero(
-                tag: 'media_${widget.message.id}',
-                child: widget.message.media!.startsWith('http')
-                    ? Image.network(widget.message.media!)
-                    : Image.file(File(widget.message.media!)),
-              ),
-            ),
-          ),
-          SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Container(
-                    decoration: BoxDecoration(
-                      color: Colors.black.withOpacity(0.5),
-                      shape: BoxShape.circle,
-                    ),
-                    child: IconButton(
-                      icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white),
-                      onPressed: () => Navigator.pop(context),
-                    ),
-                  ),
-                  if (widget.message.contenu.isNotEmpty)
-                    Expanded(
-                      child: Container(
-                        margin: const EdgeInsets.only(left: 16),
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                        decoration: BoxDecoration(
-                          color: Colors.black.withOpacity(0.5),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Text(
-                          widget.message.contenu,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 14,
-                          ),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                    ),
-                ],
-              ),
-            ),
-          ),
-        ],
+    final isVideo = message.mediaType == "video";
+    final controller = videoControllers[message.id];
+
+    return GestureDetector(
+      onTap: () => Navigator.pop(context),
+      child: Container(
+        color: Colors.black.withOpacity(0.95),
+        alignment: Alignment.center,
+        child: Hero(
+          tag: 'media_${message.id}',
+          child: isVideo && controller != null
+              ? AspectRatio(
+            aspectRatio: controller.value.aspectRatio,
+            child: VideoPlayer(controller),
+          )
+              : message.media!.startsWith('http')
+              ? Image.network(message.media!)
+              : Image.file(File(message.media!)),
+        ),
       ),
     );
   }

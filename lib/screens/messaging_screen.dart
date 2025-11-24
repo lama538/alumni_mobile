@@ -16,7 +16,8 @@ class _MessagingScreenState extends State<MessagingScreen> {
   String token = '';
   int currentUserId = 0;
   List<AppMessage> messages = [];
-  List<User> senders = [];
+  List<User> conversationUsers = [];
+  Map<int, User> usersCache = {};
   bool isLoading = true;
 
   @override
@@ -31,29 +32,64 @@ class _MessagingScreenState extends State<MessagingScreen> {
       token = prefs.getString('token') ?? '';
       currentUserId = prefs.getInt('user_id') ?? 0;
     });
-    fetchReceivedMessages();
+    await loadUsersCache();
+    fetchAllMessages();
   }
 
-  Future<void> fetchReceivedMessages() async {
+  Future<void> loadUsersCache() async {
+    try {
+      final allUsers = await MessageService.getUsers(token);
+      setState(() {
+        usersCache = {for (var user in allUsers) user.id!: user};
+      });
+      debugPrint("Cache utilisateurs chargé : ${usersCache.length} utilisateurs");
+    } catch (e) {
+      debugPrint("Erreur chargement cache utilisateurs: $e");
+    }
+  }
+
+  Future<void> fetchAllMessages() async {
     setState(() => isLoading = true);
     try {
-      final data = await MessageService.getReceivedMessages(token);
-      setState(() => messages = data);
+      final receivedMessages = await MessageService.getReceivedMessages(token);
+      final sentMessages = await MessageService.getSentMessages(token);
+      final allMessages = [...receivedMessages, ...sentMessages];
 
-      final uniqueSenders = <int, User>{};
-      for (var msg in data) {
-        // Vérifier si l'utilisateur existe déjà, sinon créer un nouvel objet User
-        if (!uniqueSenders.containsKey(msg.senderId)) {
-          uniqueSenders[msg.senderId] = User(
-            id: msg.senderId,
-            name: msg.senderName,
-            role: 'alumni',
-            email: msg.senderEmail ?? '',
-            photo: msg.senderPhoto, // Photo du message
-          );
+      setState(() => messages = allMessages);
+
+      final uniqueUsers = <int, User>{};
+
+      for (var msg in allMessages) {
+        final otherUserId = msg.senderId == currentUserId
+            ? msg.receiverId
+            : msg.senderId;
+
+        if (!uniqueUsers.containsKey(otherUserId)) {
+          if (usersCache.containsKey(otherUserId)) {
+            uniqueUsers[otherUserId] = usersCache[otherUserId]!;
+          } else {
+            final userName = msg.senderId == currentUserId
+                ? msg.receiverName
+                : msg.senderName;
+            final userEmail = msg.senderId == currentUserId
+                ? msg.receiverEmail
+                : msg.senderEmail;
+            final userPhoto = msg.senderId == currentUserId
+                ? msg.receiverPhoto
+                : msg.senderPhoto;
+
+            uniqueUsers[otherUserId] = User(
+              id: otherUserId,
+              name: userName ?? 'Utilisateur',
+              role: 'alumni',
+              email: userEmail ?? '',
+              photo: userPhoto,
+            );
+          }
         }
       }
-      setState(() => senders = uniqueSenders.values.toList());
+
+      setState(() => conversationUsers = uniqueUsers.values.toList());
     } catch (e) {
       debugPrint("Erreur fetch messages: $e");
     } finally {
@@ -72,13 +108,124 @@ class _MessagingScreenState extends State<MessagingScreen> {
         ),
       ),
     );
-    // Rafraîchir les messages après le retour du chat
-    fetchReceivedMessages();
+    fetchAllMessages();
+  }
+
+  // 🔹 NOUVELLE MÉTHODE : Supprimer une conversation
+  Future<void> deleteConversation(User user) async {
+    // Afficher une boîte de dialogue de confirmation
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(
+          children: const [
+            Icon(Icons.delete_outline, color: Colors.redAccent, size: 28),
+            SizedBox(width: 12),
+            Text('Supprimer la conversation'),
+          ],
+        ),
+        content: Text(
+          'Voulez-vous supprimer toute la conversation avec ${user.name} ? Cette action est irréversible.',
+          style: const TextStyle(fontSize: 15),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: Text(
+              'Annuler',
+              style: TextStyle(color: Colors.grey.shade700, fontSize: 16),
+            ),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.redAccent,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+            child: const Text(
+              'Supprimer',
+              style: TextStyle(color: Colors.white, fontSize: 16),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    // Afficher un loader
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const Center(
+        child: CircularProgressIndicator(
+          valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF3B82F6)),
+        ),
+      ),
+    );
+
+    try {
+      // Supprimer la conversation via l'API
+      await MessageService.deleteConversation(token, user.id!);
+
+      // Fermer le loader
+      Navigator.pop(context);
+
+      // Rafraîchir la liste
+      await fetchAllMessages();
+
+      // Afficher un message de succès
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: const [
+              Icon(Icons.check_circle, color: Colors.white),
+              SizedBox(width: 12),
+              Text('Conversation supprimée'),
+            ],
+          ),
+          backgroundColor: Colors.green,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    } catch (e) {
+      // Fermer le loader
+      Navigator.pop(context);
+
+      debugPrint("Erreur suppression conversation: $e");
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: const [
+              Icon(Icons.error_outline, color: Colors.white),
+              SizedBox(width: 12),
+              Text("Erreur lors de la suppression"),
+            ],
+          ),
+          backgroundColor: Colors.redAccent,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        ),
+      );
+    }
   }
 
   Future<void> newConversation() async {
     try {
       final users = await MessageService.getUsers(token);
+
+      final filteredUsers = users.where((user) {
+        return user.id != currentUserId && user.role?.toLowerCase() != 'admin';
+      }).toList();
+
+      setState(() {
+        usersCache = {for (var user in users) user.id!: user};
+      });
 
       User? selected = await showDialog<User>(
         context: context,
@@ -115,17 +262,26 @@ class _MessagingScreenState extends State<MessagingScreen> {
                           ),
                         ),
                       ),
-                      Icon(Icons.close, color: Colors.white70),
                     ],
                   ),
                 ),
                 Flexible(
-                  child: ListView.builder(
+                  child: filteredUsers.isEmpty
+                      ? const Center(
+                    child: Padding(
+                      padding: EdgeInsets.all(32.0),
+                      child: Text(
+                        "Aucun utilisateur disponible",
+                        style: TextStyle(color: Colors.grey),
+                      ),
+                    ),
+                  )
+                      : ListView.builder(
                     shrinkWrap: true,
                     padding: const EdgeInsets.symmetric(vertical: 8),
-                    itemCount: users.length,
+                    itemCount: filteredUsers.length,
                     itemBuilder: (context, index) {
-                      final user = users[index];
+                      final user = filteredUsers[index];
                       return InkWell(
                         onTap: () => Navigator.pop(context, user),
                         child: Container(
@@ -139,6 +295,11 @@ class _MessagingScreenState extends State<MessagingScreen> {
                                     backgroundColor: Colors.grey.shade200,
                                     backgroundImage: user.photo != null && user.photo!.isNotEmpty
                                         ? NetworkImage(user.photo!)
+                                        : null,
+                                    onBackgroundImageError: user.photo != null && user.photo!.isNotEmpty
+                                        ? (exception, stackTrace) {
+                                      debugPrint("Erreur chargement photo ${user.name}: $exception");
+                                    }
                                         : null,
                                     child: user.photo == null || user.photo!.isEmpty
                                         ? Text(
@@ -285,28 +446,34 @@ class _MessagingScreenState extends State<MessagingScreen> {
           valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF3B82F6)),
         ),
       )
-          : senders.isEmpty
+          : conversationUsers.isEmpty
           ? _buildEmptyState()
           : RefreshIndicator(
         color: const Color(0xFF3B82F6),
-        onRefresh: fetchReceivedMessages,
+        onRefresh: () async {
+          await loadUsersCache();
+          await fetchAllMessages();
+        },
         child: ListView.builder(
           padding: const EdgeInsets.symmetric(vertical: 8),
-          itemCount: senders.length,
+          itemCount: conversationUsers.length,
           itemBuilder: (context, index) {
-            final sender = senders[index];
-            final unreadCount = messages
-                .where((m) => m.senderId == sender.id && !m.isRead)
+            final user = conversationUsers[index];
+
+            final userMessages = messages.where((m) =>
+            m.senderId == user.id || m.receiverId == user.id
+            ).toList();
+
+            final unreadCount = userMessages
+                .where((m) => m.senderId == user.id && !m.isRead)
                 .length;
-            final lastMessage = messages
-                .where((m) => m.senderId == sender.id)
-                .isNotEmpty
-                ? messages
-                .where((m) => m.senderId == sender.id)
-                .reduce((a, b) =>
+
+            final lastMessage = userMessages.isNotEmpty
+                ? userMessages.reduce((a, b) =>
             a.createdAt.isAfter(b.createdAt) ? a : b)
                 : null;
-            return _buildConversationCard(sender, unreadCount, lastMessage);
+
+            return _buildConversationCard(user, unreadCount, lastMessage);
           },
         ),
       ),
@@ -388,15 +555,21 @@ class _MessagingScreenState extends State<MessagingScreen> {
     );
   }
 
-  Widget _buildConversationCard(User sender, int unreadCount, AppMessage? lastMessage) {
+  Widget _buildConversationCard(User user, int unreadCount, AppMessage? lastMessage) {
     String lastMessageText = 'Aucun message';
+    bool isOwnMessage = false;
+
     if (lastMessage != null) {
+      isOwnMessage = lastMessage.senderId == currentUserId;
+
       if (lastMessage.media != null && lastMessage.mediaType == "image") {
-        lastMessageText = '📷 Image';
+        lastMessageText = isOwnMessage ? 'Vous: 📷 Image' : '📷 Image';
       } else if (lastMessage.media != null && lastMessage.mediaType == "video") {
-        lastMessageText = '🎥 Vidéo';
+        lastMessageText = isOwnMessage ? 'Vous: 🎥 Vidéo' : '🎥 Vidéo';
       } else if (lastMessage.contenu.isNotEmpty) {
-        lastMessageText = lastMessage.contenu;
+        lastMessageText = isOwnMessage
+            ? 'Vous: ${lastMessage.contenu}'
+            : lastMessage.contenu;
       }
     }
 
@@ -416,7 +589,8 @@ class _MessagingScreenState extends State<MessagingScreen> {
       child: Material(
         color: Colors.transparent,
         child: InkWell(
-          onTap: () => openChat(sender),
+          onTap: () => openChat(user),
+          onLongPress: () => deleteConversation(user), // 🔹 Appui long pour supprimer
           borderRadius: BorderRadius.circular(16),
           child: Padding(
             padding: const EdgeInsets.all(16),
@@ -437,17 +611,17 @@ class _MessagingScreenState extends State<MessagingScreen> {
                       child: CircleAvatar(
                         radius: 28,
                         backgroundColor: Colors.grey.shade200,
-                        backgroundImage: sender.photo != null && sender.photo!.isNotEmpty
-                            ? NetworkImage(sender.photo!)
+                        backgroundImage: user.photo != null && user.photo!.isNotEmpty
+                            ? NetworkImage(user.photo!)
                             : null,
-                        onBackgroundImageError: sender.photo != null && sender.photo!.isNotEmpty
+                        onBackgroundImageError: user.photo != null && user.photo!.isNotEmpty
                             ? (exception, stackTrace) {
-                          debugPrint("Erreur chargement image: $exception");
+                          debugPrint("Erreur chargement image ${user.name}: $exception");
                         }
                             : null,
-                        child: sender.photo == null || sender.photo!.isEmpty
+                        child: user.photo == null || user.photo!.isEmpty
                             ? Text(
-                          sender.name.isNotEmpty ? sender.name[0].toUpperCase() : '?',
+                          user.name.isNotEmpty ? user.name[0].toUpperCase() : '?',
                           style: const TextStyle(
                             fontSize: 20,
                             fontWeight: FontWeight.bold,
@@ -483,7 +657,7 @@ class _MessagingScreenState extends State<MessagingScreen> {
                         children: [
                           Expanded(
                             child: Text(
-                              sender.name,
+                              user.name,
                               style: TextStyle(
                                 fontWeight: unreadCount > 0
                                     ? FontWeight.bold

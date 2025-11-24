@@ -39,6 +39,51 @@ class GroupService {
       throw Exception('Erreur récupération membres: ${response.body}');
     }
   }
+  // GroupService.dart
+  Future<List<Map<String, dynamic>>> getAvailableGroups(String token) async {
+    final url = Uri.parse('$baseUrl/groupes/available');
+    final response = await http.get(url, headers: {"Authorization": "Bearer $token"});
+    if (response.statusCode == 200) {
+      final List data = jsonDecode(response.body);
+      return List<Map<String, dynamic>>.from(data);
+    } else {
+      throw Exception('Erreur récupération groupes disponibles');
+    }
+  }
+
+  Future<void> joinGroup(String token, int groupId) async {
+    final url = Uri.parse('$baseUrl/groupes/$groupId/join');
+    final response = await http.post(url, headers: {"Authorization": "Bearer $token"});
+
+    if (response.statusCode == 200) {
+      return;
+    } else {
+      final body = jsonDecode(response.body);
+
+      throw Exception(body['message'] ?? 'Impossible de rejoindre le groupe');
+    }
+  }
+  Future<void> deleteGroup(String token, int groupId) async {
+    final url = Uri.parse('$baseUrl/groupes/$groupId');
+    final response = await http.delete(url, headers: {
+      "Authorization": "Bearer $token",
+      "Accept": "application/json",
+    });
+
+    if (response.statusCode != 200) {
+      throw Exception('Erreur suppression groupe: ${response.body}');
+    }
+  }
+
+
+  Future<void> leaveGroup(String token, int groupId) async {
+    final url = Uri.parse('$baseUrl/groupes/$groupId/leave');
+    final response = await http.post(url, headers: {"Authorization": "Bearer $token"});
+    if (response.statusCode != 200) {
+      throw Exception('Erreur quitter groupe');
+    }
+  }
+
 
   // Récupérer tous les utilisateurs pour ajout (créateur uniquement)
   Future<List<Map<String, dynamic>>> getAllUsers(String token) async {

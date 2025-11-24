@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import '../models/offre_model.dart';
 import '../services/offre_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:convert';
+
 
 class OffreFormScreen extends StatefulWidget {
   final String token;
@@ -34,6 +36,7 @@ class _OffreFormScreenState extends State<OffreFormScreen> {
   void submit() async {
     if (!_formKey.currentState!.validate()) return;
     setState(() => loading = true);
+
     try {
       int? userId;
 
@@ -44,9 +47,7 @@ class _OffreFormScreenState extends State<OffreFormScreen> {
         userId = prefs.getInt('user_id');
       }
 
-      if (userId == null) {
-        throw Exception('Utilisateur non connecté');
-      }
+      if (userId == null) throw Exception('Utilisateur non connecté');
 
       final offre = Offre(
         id: widget.existing?.id ?? 0,
@@ -80,20 +81,48 @@ class _OffreFormScreenState extends State<OffreFormScreen> {
       }
     } catch (e) {
       debugPrint('Erreur submit offre: $e');
+
+      String errorMsg = "Erreur lors de l'enregistrement";
+
+      try {
+        final match = RegExp(r'\{.*\}').firstMatch(e.toString());
+
+        if (match != null) {
+          final decoded = jsonDecode(match.group(0)!);
+          if (decoded is Map && decoded.containsKey("message")) {
+            errorMsg = decoded["message"];
+          }
+        } else if (e.toString().contains("bloqué")) {
+          errorMsg = "Votre compte a été bloqué. Vous ne pouvez pas publier une offre.";
+        }
+      } catch (_) {
+        if (e.toString().contains("bloqué")) {
+          errorMsg = "Votre compte a été bloqué. Vous ne pouvez pas publier une offre.";
+        }
+      }
+
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text('Erreur lors de l\'enregistrement'),
-            backgroundColor: const Color(0xFFEF4444),
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text("Compte bloqué"),
+            content: Text(errorMsg),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text("OK"),
+              ),
+            ],
           ),
         );
       }
-    } finally {
+    }
+
+    finally {
       setState(() => loading = false);
     }
   }
+
 
   Future pickDate() async {
     final now = DateTime.now();

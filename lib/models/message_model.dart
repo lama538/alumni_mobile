@@ -1,5 +1,3 @@
-// lib/models/message_model.dart
-
 class AppMessage {
   final int id;
   final int senderId;
@@ -9,10 +7,14 @@ class AppMessage {
   final String senderName;
   final String receiverName;
   final DateTime createdAt;
-  final String? senderEmail; // optionnel
-  final String? senderPhoto; // optionnel pour avatar
-  final String? media; // chemin image/vidéo
-  final String? mediaType; // "image" ou "video"
+  final String? senderEmail;
+  final String? senderPhoto;
+  final String? senderRole;
+  final String? receiverEmail;   // ✅ Ajouté
+  final String? receiverPhoto;   // ✅ Ajouté
+  final String? receiverRole;    // ✅ Ajouté
+  final String? media;
+  final String? mediaType;
 
   AppMessage({
     required this.id,
@@ -25,21 +27,34 @@ class AppMessage {
     required this.createdAt,
     this.senderEmail,
     this.senderPhoto,
+    this.senderRole,
+    this.receiverEmail,   // ✅ Ajouté
+    this.receiverPhoto,   // ✅ Ajouté
+    this.receiverRole,    // ✅ Ajouté
     this.media,
     this.mediaType,
   });
 
   factory AppMessage.fromJson(Map<String, dynamic> json) {
-    // gestion sécurisée de la photo
-    String? photo;
+    // Photo de l'expéditeur
+    String? senderPhoto;
     if (json['sender'] != null && json['sender']['photo'] != null) {
       final photoPath = json['sender']['photo'].toString();
-      photo = photoPath.startsWith('http')
+      senderPhoto = photoPath.startsWith('http')
           ? photoPath
           : 'http://10.0.2.2:8000/storage/$photoPath';
     }
 
-    // gestion sécurisée du media
+    // Photo du destinataire ✅
+    String? receiverPhoto;
+    if (json['receiver'] != null && json['receiver']['photo'] != null) {
+      final photoPath = json['receiver']['photo'].toString();
+      receiverPhoto = photoPath.startsWith('http')
+          ? photoPath
+          : 'http://10.0.2.2:8000/storage/$photoPath';
+    }
+
+    // URL du média
     String? mediaUrl;
     if (json['media'] != null) {
       final mediaPath = json['media'].toString();
@@ -48,7 +63,6 @@ class AppMessage {
           : 'http://10.0.2.2:8000/storage/$mediaPath';
     }
 
-    // date de création
     DateTime createdAt;
     try {
       createdAt = DateTime.parse(json['created_at']);
@@ -65,9 +79,13 @@ class AppMessage {
       senderName: json['sender']?['name'] ?? '',
       receiverName: json['receiver']?['name'] ?? '',
       senderEmail: json['sender']?['email'],
-      senderPhoto: photo,
+      senderPhoto: senderPhoto,
+      senderRole: json['sender']?['role'] ?? 'alumni',
+      receiverEmail: json['receiver']?['email'],     // ✅ Ajouté
+      receiverPhoto: receiverPhoto,                  // ✅ Ajouté
+      receiverRole: json['receiver']?['role'] ?? 'alumni', // ✅ Ajouté
       media: mediaUrl,
-      mediaType: json['media_type'], // <-- ajouté
+      mediaType: json['media_type'],
       createdAt: createdAt,
     );
   }
@@ -83,8 +101,12 @@ class AppMessage {
       'receiver_name': receiverName,
       'sender_email': senderEmail,
       'sender_photo': senderPhoto,
+      'sender_role': senderRole,
+      'receiver_email': receiverEmail,    // ✅ Ajouté
+      'receiver_photo': receiverPhoto,    // ✅ Ajouté
+      'receiver_role': receiverRole,      // ✅ Ajouté
       'media': media,
-      'media_type': mediaType, // <-- ajouté
+      'media_type': mediaType,
       'created_at': createdAt.toIso8601String(),
     };
   }

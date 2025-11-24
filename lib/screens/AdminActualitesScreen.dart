@@ -112,6 +112,7 @@ class _AdminActualitesScreenState extends State<AdminActualitesScreen> {
     try {
       final response = await request.send();
       final respStr = await response.stream.bytesToString();
+      final data = jsonDecode(respStr);
 
       if (response.statusCode == 200 || response.statusCode == 201) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -126,6 +127,21 @@ class _AdminActualitesScreenState extends State<AdminActualitesScreen> {
         );
         _resetForm();
         _fetchActualites();
+      } else if (response.statusCode == 403) {
+        // Cas utilisateur bloqué
+        showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text("Compte bloqué"),
+            content: Text(data['message'] ?? "Vous êtes bloqué. Vous ne pouvez pas poster de contenu."),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text("OK"),
+              ),
+            ],
+          ),
+        );
       } else {
         debugPrint("❌ Erreur API : ${response.statusCode}");
         debugPrint(respStr);
@@ -136,6 +152,7 @@ class _AdminActualitesScreenState extends State<AdminActualitesScreen> {
       setState(() => _loading = false);
     }
   }
+
 
   void _resetForm() {
     _titreController.clear();

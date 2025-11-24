@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import '../services/group_service.dart';
-import 'group_chat_screen.dart';
 
 class GroupDetailScreen extends StatefulWidget {
   final String userToken;
@@ -52,8 +51,14 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Erreur chargement membres: $e'),
-            backgroundColor: const Color(0xFFEF4444),
+            content: const Row(
+              children: [
+                Icon(Icons.error_outline, color: Colors.white),
+                SizedBox(width: 12),
+                Text('Erreur chargement membres'),
+              ],
+            ),
+            backgroundColor: Colors.redAccent,
             behavior: SnackBarBehavior.floating,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           ),
@@ -65,13 +70,21 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
   Future<void> loadAllUsers() async {
     try {
       final fetchedUsers = await service.getAllUsers(widget.userToken);
+
+      // *** FILTRE IMPORTANT ***
+      // Masquer admin + entreprise
+      final filtered = fetchedUsers.where((u) {
+        return u['role'] != 'admin' && u['role'] != 'entreprise';
+      }).toList();
+
       setState(() {
-        allUsers = fetchedUsers;
+        allUsers = filtered;
       });
     } catch (e) {
       setState(() => allUsers = []);
     }
   }
+
 
   Future<void> _addMemberDialog() async {
     if (widget.userId != widget.creatorId) return;
@@ -79,20 +92,23 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
     showDialog(
       context: context,
       builder: (context) => Dialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        backgroundColor: Colors.transparent,
         child: Container(
-          constraints: const BoxConstraints(maxHeight: 500),
+          constraints: const BoxConstraints(maxHeight: 600),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(24),
+          ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               Container(
                 padding: const EdgeInsets.all(24),
                 decoration: const BoxDecoration(
-                  color: Color(0xFF8B5CF6),
-                  borderRadius: BorderRadius.only(
-                    topLeft: Radius.circular(20),
-                    topRight: Radius.circular(20),
+                  gradient: LinearGradient(
+                    colors: [Color(0xFF3B82F6), Color(0xFF2563EB)],
                   ),
+                  borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
                 ),
                 child: Row(
                   children: [
@@ -174,11 +190,11 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
                             children: [
                               CircleAvatar(
                                 radius: 24,
-                                backgroundColor: const Color(0xFFF5F3FF),
+                                backgroundColor: const Color(0xFFEFF6FF),
                                 child: Text(
                                   user['name'][0].toUpperCase(),
                                   style: const TextStyle(
-                                    color: Color(0xFF8B5CF6),
+                                    color: Color(0xFF3B82F6),
                                     fontWeight: FontWeight.bold,
                                     fontSize: 18,
                                   ),
@@ -217,7 +233,7 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
                                     vertical: 4,
                                   ),
                                   decoration: BoxDecoration(
-                                    color: const Color(0xFFF5F3FF),
+                                    color: const Color(0xFFEFF6FF),
                                     borderRadius: BorderRadius.circular(6),
                                   ),
                                   child: const Text(
@@ -225,14 +241,14 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
                                     style: TextStyle(
                                       fontSize: 11,
                                       fontWeight: FontWeight.w700,
-                                      color: Color(0xFF8B5CF6),
+                                      color: Color(0xFF3B82F6),
                                     ),
                                   ),
                                 )
                               else
                                 const Icon(
                                   Icons.add_circle_rounded,
-                                  color: Color(0xFF8B5CF6),
+                                  color: Color(0xFF3B82F6),
                                   size: 24,
                                 ),
                             ],
@@ -257,7 +273,7 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: Text(widget.userId == userId ? 'Quitter le groupe ?' : 'Retirer $userName ?'),
         content: Text(
           widget.userId == userId
@@ -269,10 +285,13 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
             onPressed: () => Navigator.pop(ctx, false),
             child: const Text('Annuler'),
           ),
-          TextButton(
+          ElevatedButton(
             onPressed: () => Navigator.pop(ctx, true),
-            style: TextButton.styleFrom(
-              foregroundColor: const Color(0xFFEF4444),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.redAccent,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
             ),
             child: const Text('Confirmer'),
           ),
@@ -294,8 +313,9 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text("Erreur suppression membre: $e"),
-            backgroundColor: const Color(0xFFEF4444),
+            backgroundColor: Colors.redAccent,
             behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           ),
         );
       }
@@ -307,18 +327,18 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
     final isCreator = widget.userId == widget.creatorId;
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFC),
+      backgroundColor: const Color(0xFFF5F7FA),
       appBar: AppBar(
-        backgroundColor: const Color(0xFF8B5CF6),
         elevation: 0,
+        backgroundColor: Colors.white,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_rounded, color: Colors.white),
+          icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.black87),
           onPressed: () => Navigator.pop(context),
         ),
         title: Text(
           widget.groupName,
           style: const TextStyle(
-            color: Colors.white,
+            color: Colors.black87,
             fontWeight: FontWeight.w600,
             fontSize: 20,
           ),
@@ -326,16 +346,23 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
         centerTitle: true,
         actions: [
           if (isCreator)
-            IconButton(
-              icon: const Icon(Icons.person_add_rounded, color: Colors.white),
-              onPressed: _addMemberDialog,
+            Container(
+              margin: const EdgeInsets.only(right: 8),
+              decoration: BoxDecoration(
+                color: const Color(0xFF3B82F6).withOpacity(0.1),
+                shape: BoxShape.circle,
+              ),
+              child: IconButton(
+                icon: const Icon(Icons.person_add_rounded, color: Color(0xFF3B82F6)),
+                onPressed: _addMemberDialog,
+              ),
             ),
         ],
       ),
       body: isLoading
           ? const Center(
         child: CircularProgressIndicator(
-          color: Color(0xFF8B5CF6),
+          valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF3B82F6)),
           strokeWidth: 3,
         ),
       )
@@ -347,13 +374,13 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
             Container(
               padding: const EdgeInsets.all(24),
               decoration: BoxDecoration(
-                color: const Color(0xFFF5F3FF),
+                color: const Color(0xFF3B82F6).withOpacity(0.1),
                 shape: BoxShape.circle,
               ),
               child: const Icon(
                 Icons.people_outline_rounded,
                 size: 60,
-                color: Color(0xFF8B5CF6),
+                color: Color(0xFF3B82F6),
               ),
             ),
             const SizedBox(height: 20),
@@ -374,24 +401,39 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
             margin: const EdgeInsets.all(16),
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: const Color(0xFFF5F3FF),
-              borderRadius: BorderRadius.circular(12),
+              gradient: LinearGradient(
+                colors: [
+                  const Color(0xFF3B82F6).withOpacity(0.1),
+                  const Color(0xFF2563EB).withOpacity(0.1),
+                ],
+              ),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: const Color(0xFF3B82F6).withOpacity(0.2),
+              ),
             ),
             child: Row(
               children: [
-                const Icon(
-                  Icons.info_outline_rounded,
-                  color: Color(0xFF8B5CF6),
-                  size: 20,
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF3B82F6),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(
+                    Icons.group_rounded,
+                    color: Colors.white,
+                    size: 20,
+                  ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Text(
                     '${members.length} membre${members.length > 1 ? 's' : ''} dans ce groupe',
                     style: const TextStyle(
-                      color: Color(0xFF6D28D9),
+                      color: Color(0xFF1E40AF),
                       fontSize: 14,
-                      fontWeight: FontWeight.w500,
+                      fontWeight: FontWeight.w600,
                     ),
                   ),
                 ),
@@ -426,11 +468,11 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
                       children: [
                         CircleAvatar(
                           radius: 28,
-                          backgroundColor: const Color(0xFFF5F3FF),
+                          backgroundColor: const Color(0xFFEFF6FF),
                           child: Text(
                             m['name'][0].toUpperCase(),
                             style: const TextStyle(
-                              color: Color(0xFF8B5CF6),
+                              color: Color(0xFF3B82F6),
                               fontWeight: FontWeight.bold,
                               fontSize: 20,
                             ),
@@ -461,7 +503,12 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
                                         vertical: 4,
                                       ),
                                       decoration: BoxDecoration(
-                                        color: const Color(0xFFF5F3FF),
+                                        gradient: const LinearGradient(
+                                          colors: [
+                                            Color(0xFF3B82F6),
+                                            Color(0xFF2563EB)
+                                          ],
+                                        ),
                                         borderRadius: BorderRadius.circular(6),
                                       ),
                                       child: const Text(
@@ -469,7 +516,7 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
                                         style: TextStyle(
                                           fontSize: 11,
                                           fontWeight: FontWeight.w700,
-                                          color: Color(0xFF8B5CF6),
+                                          color: Colors.white,
                                         ),
                                       ),
                                     ),
@@ -482,7 +529,7 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
                                         vertical: 4,
                                       ),
                                       decoration: BoxDecoration(
-                                        color: const Color(0xFFEFF6FF),
+                                        color: const Color(0xFFDCFCE7),
                                         borderRadius: BorderRadius.circular(6),
                                       ),
                                       child: const Text(
@@ -490,7 +537,7 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
                                         style: TextStyle(
                                           fontSize: 11,
                                           fontWeight: FontWeight.w700,
-                                          color: Color(0xFF2563EB),
+                                          color: Color(0xFF16A34A),
                                         ),
                                       ),
                                     ),
@@ -514,7 +561,7 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
                               isCurrentUser
                                   ? Icons.exit_to_app_rounded
                                   : Icons.remove_circle_outline_rounded,
-                              color: const Color(0xFFEF4444),
+                              color: Colors.redAccent,
                             ),
                             onPressed: () => _removeMember(m['id'], m['name']),
                           ),
@@ -526,29 +573,6 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
             ),
           ),
         ],
-      ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (_) => GroupChatScreen(
-                userToken: widget.userToken,
-                groupId: widget.groupId,
-                groupName: widget.groupName,
-              ),
-            ),
-          );
-        },
-        backgroundColor: const Color(0xFF8B5CF6),
-        icon: const Icon(Icons.chat_rounded, color: Colors.white),
-        label: const Text(
-          'Discussion',
-          style: TextStyle(
-            color: Colors.white,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
       ),
     );
   }

@@ -417,32 +417,47 @@ class ApiService {
   }
 
 // Envoyer un message dans un groupe
-  static Future<GroupMessage> sendGroupMessage(String token, int groupId, String message) async {
+  // Envoyer un message dans un groupe (texte, image, vidéo, etc.)
+  static Future<GroupMessage> sendGroupMessage(
+      String token,
+      int groupId,
+      String message, {
+        String? mediaPath, // chemin du fichier média (image, vidéo, audio)
+        String? mediaType, // type du média : "image", "video", "audio"
+      }) async {
     final url = Uri.parse('$baseUrl/groupes/$groupId/messages');
 
-    final response = await http.post(
-      url,
-      headers: {
-        'Authorization': 'Bearer $token',
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-      },
-      body: jsonEncode({'message': message}), // ✅ correspond au champ Laravel
-    );
+    var request = http.MultipartRequest('POST', url)
+      ..headers['Authorization'] = 'Bearer $token'
+      ..headers['Accept'] = 'application/json'
+      ..fields['message'] = message;
+
+    // Ajouter le type de média si fourni
+    if (mediaType != null) {
+      request.fields['media_type'] = mediaType;
+    }
+
+    // Ajouter le fichier média s’il existe
+    if (mediaPath != null && mediaPath.isNotEmpty) {
+      request.files.add(await http.MultipartFile.fromPath('media', mediaPath));
+    }
+
+    // Envoyer la requête
+    final streamedResponse = await request.send();
+    final response = await http.Response.fromStream(streamedResponse);
 
     if (response.statusCode == 200 || response.statusCode == 201) {
       final data = jsonDecode(response.body);
 
-      // Vérifie que le champ message n'est pas null
-      if (data['message'] == null) {
-        data['message'] = '';
-      }
+      // Sécurisation au cas où le message serait null
+      if (data['message'] == null) data['message'] = '';
 
       return GroupMessage.fromJson(data);
     } else {
       throw Exception('Erreur envoi message: ${response.body}');
     }
   }
+
 
 
 

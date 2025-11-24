@@ -93,10 +93,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
           // ZONE BLANCHE
           Positioned(
-            top: size.height * 0.30, // remonte pour plus de place
+            top: size.height * 0.30,
             child: Container(
               width: size.width,
-              height: size.height * 0.70, // zone blanche plus haute
+              height: size.height * 0.70,
               decoration: const BoxDecoration(
                 color: Colors.white,
                 borderRadius: BorderRadius.only(
@@ -112,189 +112,231 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 ],
               ),
               padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 30),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.start,
-                children: [
-                  // TITRE INSCRIPTION
-                  const Text(
-                    "INSCRIPTION",
-                    style: TextStyle(
-                      fontSize: 28,
-                      fontWeight: FontWeight.bold,
-                      color: Color(0xFF1565C0),
-                      letterSpacing: 1,
-                    ),
-                  ),
-
-                  const SizedBox(height: 25),
-
-                  // CHAMPS PRENOM & NOM
-                  TextField(
-                    controller: nameController,
-                    style: const TextStyle(color: Colors.white),
-                    decoration: InputDecoration(
-                      labelText: "Prénom & Nom",
-                      labelStyle: const TextStyle(color: Colors.white70, fontStyle: FontStyle.italic),
-                      filled: true,
-                      fillColor: const Color(0xFF1565C0),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(30),
-                        borderSide: BorderSide.none,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.start,
+                  children: [
+                    const Text(
+                      "INSCRIPTION",
+                      style: TextStyle(
+                        fontSize: 28,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF1565C0),
+                        letterSpacing: 1,
                       ),
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 18),
                     ),
-                  ),
 
-                  const SizedBox(height: 15),
+                    const SizedBox(height: 25),
 
-                  // CHAMPS EMAIL
-                  TextField(
-                    controller: emailController,
-                    keyboardType: TextInputType.emailAddress,
-                    style: const TextStyle(color: Colors.white),
-                    decoration: InputDecoration(
-                      labelText: "E-mail",
-                      labelStyle: const TextStyle(color: Colors.white70, fontStyle: FontStyle.italic),
-                      filled: true,
-                      fillColor: const Color(0xFF1565C0),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(30),
-                        borderSide: BorderSide.none,
+                    // CHAMP PRENOM & NOM
+                    TextField(
+                      controller: nameController,
+                      style: const TextStyle(color: Colors.white),
+                      decoration: InputDecoration(
+                        labelText: "Prénom & Nom",
+                        labelStyle: const TextStyle(color: Colors.white70, fontStyle: FontStyle.italic),
+                        filled: true,
+                        fillColor: const Color(0xFF1565C0),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(30),
+                          borderSide: BorderSide.none,
+                        ),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 18),
                       ),
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 18),
                     ),
-                  ),
 
-                  const SizedBox(height: 15),
+                    const SizedBox(height: 15),
 
-                  // CHAMPS MOT DE PASSE
-                  TextField(
-                    controller: passwordController,
-                    obscureText: obscurePassword,
-                    style: const TextStyle(color: Colors.white),
-                    decoration: InputDecoration(
-                      labelText: "Mot de passe",
-                      labelStyle: const TextStyle(color: Colors.white70, fontStyle: FontStyle.italic),
-                      filled: true,
-                      fillColor: const Color(0xFF1565C0),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(30),
-                        borderSide: BorderSide.none,
+                    // CHAMP EMAIL
+                    TextField(
+                      controller: emailController,
+                      keyboardType: TextInputType.emailAddress,
+                      style: const TextStyle(color: Colors.white),
+                      decoration: InputDecoration(
+                        labelText: "E-mail",
+                        labelStyle: const TextStyle(color: Colors.white70, fontStyle: FontStyle.italic),
+                        filled: true,
+                        fillColor: const Color(0xFF1565C0),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(30),
+                          borderSide: BorderSide.none,
+                        ),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 18),
                       ),
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 18),
-                      suffixIcon: IconButton(
-                        icon: Icon(
-                          obscurePassword ? Icons.visibility_off : Icons.visibility,
+                    ),
+
+                    const SizedBox(height: 15),
+
+                    // CHAMP ROLE (DROPDOWN)
+                    DropdownButtonFormField<String>(
+                      value: selectedRole,
+                      dropdownColor: const Color(0xFF1565C0),
+                      style: const TextStyle(color: Colors.white),
+                      decoration: InputDecoration(
+                        labelText: "Rôle",
+                        labelStyle: const TextStyle(
                           color: Colors.white70,
+                          fontStyle: FontStyle.italic,
                         ),
-                        onPressed: () {
-                          setState(() => obscurePassword = !obscurePassword);
-                        },
+                        filled: true,
+                        fillColor: const Color(0xFF1565C0),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(30),
+                          borderSide: BorderSide.none,
+                        ),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 18),
                       ),
+                      items: const [
+                        DropdownMenuItem(
+                          value: 'etudiant',
+                          child: Text("Étudiant", style: TextStyle(color: Colors.white)),
+                        ),
+                        DropdownMenuItem(
+                          value: 'alumni',
+                          child: Text("Alumni", style: TextStyle(color: Colors.white)),
+                        ),
+                        DropdownMenuItem(
+                          value: 'entreprise',
+                          child: Text("Entreprise", style: TextStyle(color: Colors.white)),
+                        ),
+                      ],
+                      onChanged: (value) {
+                        setState(() {
+                          selectedRole = value!;
+                        });
+                      },
                     ),
-                  ),
 
-                  const SizedBox(height: 15),
+                    const SizedBox(height: 15),
 
-                  // CHAMPS CONFIRMER MOT DE PASSE
-                  TextField(
-                    controller: confirmPasswordController,
-                    obscureText: obscureConfirmPassword,
-                    style: const TextStyle(color: Colors.white),
-                    decoration: InputDecoration(
-                      labelText: "Confirmer mot de passe",
-                      labelStyle: const TextStyle(color: Colors.white70, fontStyle: FontStyle.italic),
-                      filled: true,
-                      fillColor: const Color(0xFF1565C0),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(30),
-                        borderSide: BorderSide.none,
-                      ),
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 18),
-                      suffixIcon: IconButton(
-                        icon: Icon(
-                          obscureConfirmPassword ? Icons.visibility_off : Icons.visibility,
-                          color: Colors.white70,
+                    // MOT DE PASSE
+                    TextField(
+                      controller: passwordController,
+                      obscureText: obscurePassword,
+                      style: const TextStyle(color: Colors.white),
+                      decoration: InputDecoration(
+                        labelText: "Mot de passe",
+                        labelStyle: const TextStyle(color: Colors.white70, fontStyle: FontStyle.italic),
+                        filled: true,
+                        fillColor: const Color(0xFF1565C0),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(30),
+                          borderSide: BorderSide.none,
                         ),
-                        onPressed: () {
-                          setState(() => obscureConfirmPassword = !obscureConfirmPassword);
-                        },
-                      ),
-                    ),
-                  ),
-
-                  const SizedBox(height: 25),
-
-                  // BOUTON INSCRIPTION
-                  SizedBox(
-                    width: double.infinity,
-                    height: 56,
-                    child: ElevatedButton(
-                      onPressed: isLoading ? null : register,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF1565C0),
-                        foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(40),
-                        ),
-                        elevation: 3,
-                      ),
-                      child: isLoading
-                          ? const SizedBox(
-                        width: 24,
-                        height: 24,
-                        child: CircularProgressIndicator(
-                          color: Colors.white,
-                          strokeWidth: 2,
-                        ),
-                      )
-                          : const Text(
-                        "S'INSCRIRE",
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                          letterSpacing: 1,
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 18),
+                        suffixIcon: IconButton(
+                          icon: Icon(
+                            obscurePassword ? Icons.visibility_off : Icons.visibility,
+                            color: Colors.white70,
+                          ),
+                          onPressed: () {
+                            setState(() => obscurePassword = !obscurePassword);
+                          },
                         ),
                       ),
                     ),
-                  ),
 
-                  const SizedBox(height: 15),
+                    const SizedBox(height: 15),
 
-                  // TEXTE CONNEXION
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Text(
-                        "CONNECTEZ-VOUS",
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w700,
-                          color: Color(0xFF1565C0),
-                          decoration: TextDecoration.underline,
+                    // CONFIRMATION MOT DE PASSE
+                    TextField(
+                      controller: confirmPasswordController,
+                      obscureText: obscureConfirmPassword,
+                      style: const TextStyle(color: Colors.white),
+                      decoration: InputDecoration(
+                        labelText: "Confirmer mot de passe",
+                        labelStyle: const TextStyle(color: Colors.white70, fontStyle: FontStyle.italic),
+                        filled: true,
+                        fillColor: const Color(0xFF1565C0),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(30),
+                          borderSide: BorderSide.none,
+                        ),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 18),
+                        suffixIcon: IconButton(
+                          icon: Icon(
+                            obscureConfirmPassword ? Icons.visibility_off : Icons.visibility,
+                            color: Colors.white70,
+                          ),
+                          onPressed: () {
+                            setState(() => obscureConfirmPassword = !obscureConfirmPassword);
+                          },
                         ),
                       ),
-                      const SizedBox(width: 4),
-                      TextButton(
-                        onPressed: () {
-                          Navigator.pushReplacementNamed(context, "/login");
-                        },
-                        child: const Text(
-                          "! si vous avez déjà un compte",
+                    ),
+
+                    const SizedBox(height: 25),
+
+                    // BOUTON INSCRIPTION
+                    SizedBox(
+                      width: double.infinity,
+                      height: 56,
+                      child: ElevatedButton(
+                        onPressed: isLoading ? null : register,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF1565C0),
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(40),
+                          ),
+                          elevation: 3,
+                        ),
+                        child: isLoading
+                            ? const SizedBox(
+                          width: 24,
+                          height: 24,
+                          child: CircularProgressIndicator(
+                            color: Colors.white,
+                            strokeWidth: 2,
+                          ),
+                        )
+                            : const Text(
+                          "S'INSCRIRE",
                           style: TextStyle(
-                            fontSize: 14,
-                            color: Color(0xFF1565C0),
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: 1,
                           ),
                         ),
                       ),
-                    ],
-                  ),
-                ],
+                    ),
+
+                    const SizedBox(height: 15),
+
+                    // TEXTE CONNEXION
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Text(
+                          "CONNECTEZ-VOUS",
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w700,
+                            color: Color(0xFF1565C0),
+                            decoration: TextDecoration.underline,
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        TextButton(
+                          onPressed: () {
+                            Navigator.pushReplacementNamed(context, "/login");
+                          },
+                          child: const Text(
+                            "! si vous avez déjà un compte",
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: Color(0xFF1565C0),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
 
-          // LOADING OVERLAY
           if (isLoading)
             Container(
               color: Colors.black45,

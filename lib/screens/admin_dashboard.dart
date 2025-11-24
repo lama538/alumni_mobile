@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 import '../services/stats_service.dart';
 import 'AdminActualitesScreen.dart';
+import 'users_list_screen.dart'; // <-- écran pour afficher la liste des utilisateurs
 
 class AdminDashboard extends StatefulWidget {
   const AdminDashboard({super.key});
@@ -152,7 +153,8 @@ class _AdminDashboardState extends State<AdminDashboard> {
               ),
               actions: [
                 IconButton(
-                  icon: const Icon(Icons.refresh_rounded, color: Colors.white),
+                  icon: const Icon(Icons.refresh_rounded,
+                      color: Colors.white),
                   onPressed: _loadStats,
                 ),
                 const SizedBox(width: 8),
@@ -188,6 +190,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
         'value': stats!['totaux']['alumni'],
         'color': const Color(0xFF3B82F6),
         'bg': const Color(0xFFEFF6FF),
+        'type': 'alumni',
       },
       {
         'icon': Icons.school_rounded,
@@ -195,6 +198,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
         'value': stats!['totaux']['etudiants'],
         'color': const Color(0xFF0EA5E9),
         'bg': const Color(0xFFE0F2FE),
+        'type': 'etudiant',
       },
       {
         'icon': Icons.business_rounded,
@@ -202,6 +206,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
         'value': stats!['totaux']['entreprises'],
         'color': const Color(0xFF8B5CF6),
         'bg': const Color(0xFFF5F3FF),
+        'type': 'entreprise',
       },
       {
         'icon': Icons.work_rounded,
@@ -209,6 +214,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
         'value': stats!['totaux']['offres'],
         'color': const Color(0xFF06B6D4),
         'bg': const Color(0xFFCFFAFE),
+        'type': 'offre',
       },
       {
         'icon': Icons.event_rounded,
@@ -238,12 +244,26 @@ class _AdminDashboardState extends State<AdminDashboard> {
       itemCount: statsData.length,
       itemBuilder: (context, index) {
         final stat = statsData[index];
-        return _statCard(
-          icon: stat['icon'] as IconData,
-          title: stat['title'] as String,
-          value: stat['value'],
-          color: stat['color'] as Color,
-          bgColor: stat['bg'] as Color,
+        return GestureDetector(
+          onTap: () {
+            if (stat.containsKey('type')) {
+              // <-- Correction ici : UsersListScreen (avec s)
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) =>
+                      UsersListScreen(type: stat['type'] as String),
+                ),
+              );
+            }
+          },
+          child: _statCard(
+            icon: stat['icon'] as IconData,
+            title: stat['title'] as String,
+            value: stat['value'],
+            color: stat['color'] as Color,
+            bgColor: stat['bg'] as Color,
+          ),
         );
       },
     );
@@ -286,7 +306,8 @@ class _AdminDashboardState extends State<AdminDashboard> {
                   child: Icon(icon, size: 26, color: color),
                 ),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  padding:
+                  const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(
                     color: bgColor,
                     borderRadius: BorderRadius.circular(8),
@@ -370,7 +391,8 @@ class _AdminDashboardState extends State<AdminDashboard> {
                 ],
               ),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                padding:
+                const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 decoration: BoxDecoration(
                   color: const Color(0xFFEFF6FF),
                   borderRadius: BorderRadius.circular(12),
