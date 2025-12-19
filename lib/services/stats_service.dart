@@ -3,7 +3,7 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 class StatsService {
-  final String baseUrl = "http://10.0.2.2:8000/api";
+  final String baseUrl = "http://127.0.0.1:8000/api";
 
   // Méthode principale pour récupérer les stats
   Future<Map<String, dynamic>> fetchStats() async {
