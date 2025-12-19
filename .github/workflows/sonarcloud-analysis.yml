@@ -23,7 +23,8 @@ jobs:
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
-         flutter-version: '3.13.0'
+          flutter-version: '3.35.7'  # version stable que tu as localement
+
 
 
 
