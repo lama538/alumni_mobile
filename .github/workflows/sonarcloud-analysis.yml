@@ -1,47 +1,74 @@
-- name: Setup Flutter
-  uses: subosito/flutter-action@v2
-  with:
-    flutter-version: '3.14.0'  # compatible Dart >=3.9.2
+name: Flutter + SonarCloud Analysis
 
-- name: Flutter Doctor
-  run: flutter doctor
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    types: [opened, synchronize, reopened]
 
-- name: Cache pub packages
-  uses: actions/cache@v4
-  with:
-    path: ~/.pub-cache
-    key: ${{ runner.os }}-pub-${{ hashFiles('**/pubspec.yaml') }}
-    restore-keys: |
-      ${{ runner.os }}-pub-
+jobs:
+  build-test-analyze:
+    name: Build, Test & Analyze
+    runs-on: ubuntu-latest
+    env:
+      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+    steps:
+      # 1️⃣ Cloner le dépôt
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Clones complets pour Sonar
 
-- name: Flutter pub get
-  run: flutter pub get
+      # 2️⃣ Installer Flutter
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.14.0'  # Compatible Dart >=3.9.2
 
-- name: Setup JDK 17
-  uses: actions/setup-java@v4
-  with:
-    java-version: 17
-    distribution: 'temurin'
+      # 3️⃣ Vérifier Flutter
+      - name: Flutter Doctor
+        run: flutter doctor
 
-- name: Flutter build
-  run: flutter build apk --debug
+      # 4️⃣ Activer le cache pour pub packages
+      - name: Cache pub packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.pub-cache
+          key: ${{ runner.os }}-pub-${{ hashFiles('**/pubspec.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pub-
 
-- name: Cache Sonar
-  uses: actions/cache@v4
-  with:
-    path: ~/.sonar/cache
-    key: ${{ runner.os }}-sonar
+      # 5️⃣ Installer les dépendances Flutter
+      - name: Flutter pub get
+        run: flutter pub get
 
-- name: SonarCloud Scan
-  env:
-    SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-  run: |
-    flutter analyze -f json > report/analyzer-output.json
-    sonar-scanner \
-      -Dsonar.projectKey=lama-fall_alumni_mobile \
-      -Dsonar.organization=lama-fall \
-      -Dsonar.host.url=https://sonarcloud.io \
-      -Dsonar.sources=lib \
-      -Dsonar.exclusions=build/**,**/*.g.dart \
-      -Dsonar.dart.analyzer.reportFiles=report/analyzer-output.json \
-      -Dsonar.login=${{ secrets.SONAR_TOKEN }}
+      # 6️⃣ Installer JDK pour SonarCloud
+      - name: Setup JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: 17
+          distribution: 'temurin'
+
+      # 7️⃣ Construire l’application (optionnel)
+      - name: Flutter build APK
+        run: flutter build apk --debug
+
+      # 8️⃣ Cache Sonar
+      - name: Cache Sonar
+        uses: actions/cache@v4
+        with:
+          path: ~/.sonar/cache
+          key: ${{ runner.os }}-sonar
+
+      # 9️⃣ Analyse SonarCloud
+      - name: SonarCloud Scan
+        run: |
+          sonar-scanner \
+            -Dsonar.projectKey=lama-fall_alumni_mobile \
+            -Dsonar.organization=lama-fall \
+            -Dsonar.host.url=https://sonarcloud.io \
+            -Dsonar.sources=lib \
+            -Dsonar.exclusions=build/**,**/*.g.dart \
+            -Dsonar.dart.analyzer.reportFiles=report/analyzer-output.json \
+            -Dsonar.login=${{ secrets.SONAR_TOKEN }}
