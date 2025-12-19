@@ -18,13 +18,13 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # Clones complets pour Sonar
-
+          fetch-depth: 0  
       # 2️⃣ Installer Flutter
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.14.0'  # Compatible Dart >=3.9.2
+          flutter-version: '3.13.0' 
+
 
       # 3️⃣ Vérifier Flutter
       - name: Flutter Doctor
