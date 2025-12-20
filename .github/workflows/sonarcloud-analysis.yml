@@ -66,8 +66,8 @@ jobs:
         with:
            projectBaseDir: .
            args: >
-             -Dsonar.projectKey=lama-fall_alumni_mobile
-             -Dsonar.organization=lama-fall
+             -Dsonar.projectKey=lama538_alumni_mobile
+             -Dsonar.organization=lama538
              -Dsonar.sources=lib
              -Dsonar.exclusions=build/**,**/*.g.dart
         env:
