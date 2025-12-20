@@ -63,14 +63,13 @@ jobs:
           path: ~/.sonar/cache
           key: ${{ runner.os }}-sonar
 
-      # 9️⃣ Analyse SonarCloud
+      # 8️⃣ Analyse SonarCloud
       - name: SonarCloud Scan
-        run: |
-          sonar-scanner \
-            -Dsonar.projectKey=lama-fall_alumni_mobile \
-            -Dsonar.organization=lama-fall \
-            -Dsonar.host.url=https://sonarcloud.io \
-            -Dsonar.sources=lib \
-            -Dsonar.exclusions=build/**,**/*.g.dart \
-            -Dsonar.dart.analyzer.reportFiles=report/analyzer-output.json \
-            -Dsonar.login=${{ secrets.SONAR_TOKEN }}
+        uses: SonarSource/sonarcloud-github-action@master
+        with:
+          organization: lama-fall        # clé d'organisation SonarCloud
+          projectKey: lama-fall_alumni_mobile
+          projectBaseDir: ./             # répertoire du projet
+        env:
+           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+
