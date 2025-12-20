@@ -23,10 +23,7 @@ jobs:
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.35.7'  # version stable que tu as localement
-
-
-
+          flutter-version: '3.35.7'  
 
       # 3️⃣ Vérifier Flutter
       - name: Flutter Doctor
@@ -60,8 +57,8 @@ jobs:
       - name: Cache Sonar
         uses: actions/cache@v4
         with:
-        path: ~/.sonar/cache
-        key: ${{ runner.os }}-sonar
+          path: ~/.sonar/cache
+          key: ${{ runner.os }}-sonar
 
       # 9️⃣ Analyse SonarCloud
       - name: SonarCloud Scan
